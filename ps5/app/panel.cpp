@@ -38,6 +38,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -701,6 +702,34 @@ void handle(int fd, const std::string & method, const std::string & path, const 
     reply(fd, code, out);
 }
 
+// The value of one header, matched at the start of a line. Names ignore case.
+bool header_length(const std::string & headers, const char * name, size_t * length) {
+    const size_t n = std::strlen(name);
+    for (size_t at = 0; at < headers.size();) {
+        const size_t end = headers.find("\r\n", at);
+        const size_t line_end = end == std::string::npos ? headers.size() : end;
+        if (line_end >= at + n + 1 && headers[at + n] == ':') {
+            bool match = true;
+            for (size_t i = 0; i < n; ++i) {
+                if (std::tolower(static_cast<unsigned char>(headers[at + i])) !=
+                    std::tolower(static_cast<unsigned char>(name[i]))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                *length = static_cast<size_t>(std::strtoul(headers.c_str() + at + n + 1, nullptr, 10));
+                return true;
+            }
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        at = end + 2;
+    }
+    return false;
+}
+
 std::string read_request(int fd, std::string * method, std::string * path, std::string * body) {
     std::string raw;
     char buf[2048];
@@ -729,24 +758,26 @@ std::string read_request(int fd, std::string * method, std::string * path, std::
     }
     size_t length = 0;
     const std::string headers = raw.substr(0, head);
-    const std::string key = "Content-Length:";
-    const size_t at = headers.find(key);
-    if (at != std::string::npos) {
-        length = (size_t) std::strtoul(headers.c_str() + at + key.size(), nullptr, 10);
-    }
-    if (length > 262144) {
+    // Header names are case-insensitive. With no Content-Length, keep the body
+    // bytes already read. Treating that as length zero would drop them.
+    const bool have_length = header_length(headers, "content-length", &length);
+    if (have_length && length > 262144) {
         return "body too large";
     }
     *body = raw.substr(head + 4);
-    while (body->size() < length) {
-        const ssize_t n = recv(fd, buf, sizeof(buf), 0);
-        if (n <= 0) {
-            break;
+    if (have_length) {
+        while (body->size() < length) {
+            const ssize_t n = recv(fd, buf, sizeof(buf), 0);
+            if (n <= 0) {
+                break;
+            }
+            body->append(buf, (size_t) n);
         }
-        body->append(buf, (size_t) n);
-    }
-    if (body->size() > length) {
-        body->resize(length);
+        if (body->size() > length) {
+            body->resize(length);
+        }
+    } else if (body->size() > 262144) {
+        return "body too large";
     }
     return {};
 }
@@ -1168,14 +1199,16 @@ bool accept_transient(int err) {
 }
 
 void serve_page(const std::function<void(const std::string &)> & note) {
-    const std::string page = load_page_file();
-    if (page.empty()) {
+    // Shared with each request. A model load returns from this function while
+    // a browser can still be reading the page, so the text cannot live on this stack.
+    const auto page = std::make_shared<const std::string>(load_page_file());
+    if (page->empty()) {
         std::printf("artemislm-ps5: %s is missing\n", kPageFile);
         if (note) {
             note("The page file is missing");
         }
     } else {
-        std::printf("artemislm-ps5: page file %zu bytes\n", page.size());
+        std::printf("artemislm-ps5: page file %zu bytes\n", page->size());
     }
     for (;;) {
         if (g_page_stop.load()) {
@@ -1239,9 +1272,9 @@ void serve_page(const std::function<void(const std::string &)> & note) {
                 }
                 break;
             }
-            std::thread([fd, &page] {
+            std::thread([fd, page] {
                 try {
-                    idle_client(fd, page);
+                    idle_client(fd, *page);
                 } catch (const std::exception &) {
                 }
                 close(fd);
@@ -1264,21 +1297,34 @@ void page_start(std::function<void(const std::string &)> note) {
     // The console's default thread stack is small. Reading the page stays on this one.
     auto saved = note;
     auto * run = new std::function<void()>([note = std::move(note)] { serve_page(note); });
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, 4u << 20);
-    pthread_t thread{};
-    const int rc = pthread_create(&thread, &attr, [](void * p) -> void * {
-        (*static_cast<std::function<void()> *>(p))();
-        return nullptr;
-    }, run);
-    pthread_attr_destroy(&attr);
-    if (rc != 0) {
-        std::printf("artemislm-ps5: page thread failed to start\n");
+    auto fail = [&](const char * why) {
+        std::printf("artemislm-ps5: %s\n", why);
         delete run;
         if (saved) {
             saved("The page thread did not start");
         }
+    };
+    pthread_attr_t attr;
+    if (pthread_attr_init(&attr) != 0) {
+        fail("page thread setup failed");
+        return;
+    }
+    if (pthread_attr_setstacksize(&attr, 4u << 20) != 0) {
+        pthread_attr_destroy(&attr);
+        fail("page thread stack failed");
+        return;
+    }
+    pthread_t thread{};
+    const int rc = pthread_create(&thread, &attr, [](void * p) -> void * {
+        // The request threads hold their own copy of the page text. This
+        // function can go once serve_page has returned.
+        std::unique_ptr<std::function<void()>> owned(static_cast<std::function<void()> *>(p));
+        (*owned)();
+        return nullptr;
+    }, run);
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
+        fail("page thread failed to start");
         return;
     }
     pthread_detach(thread);

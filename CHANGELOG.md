@@ -1,12 +1,27 @@
 # Changelog
 
-ArtemisLM PS5 0.12.1, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.1.zip`.
-`contentVersion` is `01.012.001`. A newer release installs from Settings, or by
+ArtemisLM PS5 0.12.2, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.2.zip`.
+`contentVersion` is `01.012.002`. A newer release installs from Settings, or by
 copying the `PPSA98010` folder over the installed one.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.2] - 2026-10-19
+
+### Fixed
+
+- Loading a model closes the idle page while a browser can still be reading it.
+  The page text now stays alive until that request finishes, so the restart can
+  replace the process.
+- A model thread that cannot start is reported on the television and in the
+  log. The loading notice is cleared and the page on port 47281 opens, so a
+  model can be chosen again. A boot thread that cannot start runs that scan on
+  the main thread, and the splash does not wait for a thread that was never
+  created.
+- The library keeps a request body when its Content-Length header uses any
+  capitalisation, and when the header is absent and the body already arrived.
 
 ## [0.12.1] - 2026-10-19
 

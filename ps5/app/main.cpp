@@ -549,7 +549,7 @@ struct Models {
         return p.fits ? p.args : std::vector<std::string>{};
     }
 
-    void start(const std::string & path, std::vector<std::string> args, StatsCollector & stats, const Live & model_part) {
+    bool start(const std::string & path, std::vector<std::string> args, StatsCollector & stats, const Live & model_part) {
         // llama.cpp's own log, written as it goes (it survives a crash), and
         // the metrics the dashboard reads.
         args.insert(args.begin(), { "--log-file", "/data/ArtemisLM/llama.log" });
@@ -590,12 +590,37 @@ struct Models {
         // a connection from the LAN. llama-server also refuses the port once
         // and would exit, so the stack is brought up before that thread starts.
         net_up();
+        // The model line is already on screen. A failed thread clears it and
+        // the caller opens the idle page, so the port does not stay silent.
+        auto give_up = [&](const char * why) {
+            std::printf("artemislm-ps5: %s\n", why);
+            running.clear();
+            panel_set_running("");
+            stats.set_model(Live{});
+            notify("ArtemisLM PS5: the server thread did not start");
+        };
         pthread_attr_t attr;
-        pthread_attr_init(&attr);
-        pthread_attr_setstacksize(&attr, 16u << 20);  // the console's default stack is small
-        pthread_create(&server, &attr, run_server, nullptr);
+        if (pthread_attr_init(&attr) != 0) {
+            give_up("server thread setup failed");
+            return false;
+        }
+        // The console's default stack is small. Keep the 16 MiB stack llama-server uses.
+        if (pthread_attr_setstacksize(&attr, 16u << 20) != 0) {
+            pthread_attr_destroy(&attr);
+            give_up("server thread stack failed");
+            return false;
+        }
+        const int rc = pthread_create(&server, &attr, run_server, nullptr);
+        pthread_attr_destroy(&attr);
+        if (rc != 0) {
+            char why[80];
+            std::snprintf(why, sizeof(why), "server thread failed to start (%d)", rc);
+            give_up(why);
+            return false;
+        }
         server_started = true;
         notify("ArtemisLM PS5: loading the model onto the GPU");
+        return true;
     }
 
     void stop() {
@@ -622,16 +647,28 @@ struct Models {
 };
 
 // A thread with a 16 MiB stack, as llama-server's: the console's default is small.
-pthread_t start_thread(std::function<void()> & fn) {
+// False leaves *out unset. The caller runs the work itself or reports the failure.
+bool start_thread(std::function<void()> & fn, pthread_t * out) {
     pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, 16u << 20);
-    pthread_t t{};
-    pthread_create(&t, &attr, [](void * p) -> void * {
+    if (pthread_attr_init(&attr) != 0) {
+        std::printf("artemislm-ps5: thread setup failed\n");
+        return false;
+    }
+    if (pthread_attr_setstacksize(&attr, 16u << 20) != 0) {
+        pthread_attr_destroy(&attr);
+        std::printf("artemislm-ps5: thread stack failed\n");
+        return false;
+    }
+    const int rc = pthread_create(out, &attr, [](void * p) -> void * {
         (*static_cast<std::function<void()> *>(p))();
         return nullptr;
     }, &fn);
-    return t;
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
+        std::printf("artemislm-ps5: thread failed to start (%d)\n", rc);
+        return false;
+    }
+    return true;
 }
 
 bool load_font(hui::gfx::Renderer & renderer, const char * name, hui::gfx::Font * font, hui::ui::FontRef * ref) {
@@ -829,9 +866,10 @@ int main(int, char **) {
             }
         }
         log_memory("before loading");
-        if (!args.empty()) {
-            models.start(path, args, stats, model_part);
-        } else {
+        if (args.empty() || !models.start(path, args, stats, model_part)) {
+            if (!args.empty()) {
+                std::printf("artemislm-ps5: model thread did not start; opening the page\n");
+            }
             stats.set_state(ServerState::no_model);
             idle_page = true;
         }
@@ -842,7 +880,14 @@ int main(int, char **) {
         boot();
         booted = true;
     };
-    const pthread_t booting = start_thread(boot_then);
+    pthread_t booting{};
+    const bool boot_thread = start_thread(boot_then, &booting);
+    if (!boot_thread) {
+        // The splash waits on this scan. With no thread, do it here so the
+        // wait cannot sit up forever and then join a thread that was never created.
+        std::printf("artemislm-ps5: boot thread failed to start; scanning on the main thread\n");
+        boot_then();
+    }
     {
         hui::ui::Feedback quiet;  // no sounds yet: the mixer starts after
         const int64_t start = hui::sys::monotonic_us();
@@ -860,7 +905,9 @@ int main(int, char **) {
             display.swap();
         }
     }
-    pthread_join(booting, nullptr);
+    if (boot_thread) {
+        pthread_join(booting, nullptr);
+    }
 
     // Input and sound, as ps5-homebrew-ui's own app does.
     hui::ps5::Pad pad;
