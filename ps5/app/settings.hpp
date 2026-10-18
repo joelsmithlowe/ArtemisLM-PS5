@@ -30,8 +30,8 @@ struct Settings {
     std::string reasoning = "auto"; // "auto", "on" or "off": thinking, for models that have it
     std::string system_prompt = "home";  // "none", "helpful", "concise" or "home"
     bool        sounds    = true;
-    bool        tools     = true;   // file tools in the browser chat, inside the scratch folder
-    bool        web_search = true;  // web_search and web_fetch, through the console's own HTTPS
+    bool        tools     = true;   // scratch, projects, folder listing, and notes under /data/ArtemisLM
+    bool        web_search = true;  // web_search and web_fetch. A research question also reads one page
     bool        datetime  = true;   // the console's clock, as a tool
     uint32_t    scratch_limit_gib = 2;  // warn when the scratch folder grows past this
     std::string download_dir = "/data/ArtemisLM/models";  // where the market saves models

@@ -21,13 +21,12 @@ already share, and the same kind of folder on an M.2 or USB drive. A copy found 
 where it is, or be moved home and the old file removed.
 
 The chat reads the console clock, searches the web, and works out a plain sum before it asks the
-model. Settings on the television and on the phone page cover context, flash attention, the prompt
-batch, and how much spare memory to keep. Measured is the spare this console was tested with.
-
-The pictures on this page are drawn for ArtemisLM PS5. They are the mark, and the phone page.
+model. A research question also reads the text of one page. Settings on the television and on the
+phone page cover context, flash attention, the prompt batch, and how much spare memory to keep.
+Measured is the spare this console was tested with.
 
 <p align="center">
-  <img src="docs/media/artemislm-ps5-mark.gif" width="720" alt="ArtemisLM PS5: a paper plane follows a trail of code toward a few stars">
+  <img src="docs/media/artemislm-ps5-mark.gif" width="720" alt="ArtemisLM PS5">
 </p>
 
 <p align="center">
@@ -110,6 +109,11 @@ You need a PS5 on firmware 7.00 to 13.60, jailbroken, with these payloads loaded
 4. Load it. Once Home says Ready, the same address is the chat, or point your OpenAI or
    Anthropic client at it. Library and Settings on that page use port 47282 on the same console.
    A question about today uses the console clock, then the web search. A plain sum is worked out first.
+   With file tools on, the browser chat can save a project in `/data/ArtemisLM/projects`
+   (a Node server, a static page, or a Python program), review the files, and leave them
+   to copy off with FTP. The console does not start Node or Python. The same switch lists
+   projects, scratch, models, and a USB or M.2 drive, and it keeps short notes. A note is
+   added to a later chat only when the question matches it.
 
 To update, open **Settings > Sound and storage > App update**, or the same button on the
 phone page. The app checks the GitHub releases, checks the zip, and installs it into

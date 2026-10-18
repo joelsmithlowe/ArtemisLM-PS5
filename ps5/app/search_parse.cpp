@@ -422,6 +422,134 @@ std::string html_to_text(const std::string & html, size_t max_chars) {
     return trim(html_unescape(out.substr(0, max_chars)));
 }
 
+namespace {
+
+// The quoted href in one tag, or empty. The name match ignores case.
+std::string href_from(const std::string & tag) {
+    std::string lower = tag;
+    for (char & c : lower) {
+        c = (char) std::tolower((unsigned char) c);
+    }
+    for (size_t at = 0; (at = lower.find("href", at)) != std::string::npos; at += 4) {
+        if (at > 0 && std::isalnum((unsigned char) lower[at - 1])) {
+            continue;
+        }
+        size_t p = at + 4;
+        while (p < tag.size() && std::isspace((unsigned char) tag[p])) {
+            ++p;
+        }
+        if (p >= tag.size() || tag[p] != '=') {
+            continue;
+        }
+        ++p;
+        while (p < tag.size() && std::isspace((unsigned char) tag[p])) {
+            ++p;
+        }
+        if (p >= tag.size()) {
+            break;
+        }
+        const char q = tag[p];
+        if (q != '"' && q != '\'') {
+            continue;
+        }
+        const size_t end = tag.find(q, p + 1);
+        if (end == std::string::npos) {
+            break;
+        }
+        return tag.substr(p + 1, end - (p + 1));
+    }
+    return {};
+}
+
+bool head_is(const std::string & head, const char * name) {
+    const size_t n = std::strlen(name);
+    if (head.size() < n) {
+        return false;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (std::tolower((unsigned char) head[i]) != name[i]) {
+            return false;
+        }
+    }
+    return head.size() == n || !std::isalpha((unsigned char) head[n]);
+}
+
+}  // namespace
+
+std::vector<std::string> html_links(const std::string & html, int limit) {
+    std::vector<std::string> out;
+    if (limit < 1) {
+        return out;
+    }
+    for (size_t i = 0; i < html.size() && (int) out.size() < limit;) {
+        if (html[i] != '<') {
+            ++i;
+            continue;
+        }
+        const size_t end = html.find('>', i);
+        if (end == std::string::npos) {
+            break;
+        }
+        const std::string tag = html.substr(i + 1, end - (i + 1));
+        const std::string head = tag.substr(0, std::min(tag.size(), (size_t) 16));
+        const auto skip_until = [&](const char * close) {
+            const size_t at = html.find(close, end);
+            i = at == std::string::npos ? html.size() : at + std::strlen(close);
+        };
+        if (head_is(head, "script")) {
+            skip_until("</script>");
+            if (i == html.size()) {
+                skip_until("</SCRIPT>");
+            }
+            continue;
+        }
+        if (head_is(head, "style")) {
+            skip_until("</style>");
+            if (i == html.size()) {
+                skip_until("</STYLE>");
+            }
+            continue;
+        }
+        i = end + 1;
+        std::string href = trim(html_unescape(href_from(tag)));
+        if (href.rfind("https://", 0) != 0 && href.rfind("http://", 0) != 0) {
+            continue;
+        }
+        if (href.find('@') != std::string::npos || href.find(' ') != std::string::npos) {
+            continue;
+        }
+        bool seen = false;
+        for (const auto & have : out) {
+            seen = seen || have == href;
+        }
+        if (!seen) {
+            out.push_back(std::move(href));
+        }
+    }
+    return out;
+}
+
+std::string html_page(const std::string & html, size_t max_chars) {
+    if (max_chars == 0) {
+        return {};
+    }
+    std::string text = html_to_text(html, max_chars);
+    const std::vector<std::string> links = html_links(html, 6);
+    if (links.empty() || text.size() >= max_chars) {
+        return text.substr(0, std::min(text.size(), max_chars));
+    }
+    std::string extra = "\n\nLinks:";
+    for (const auto & link : links) {
+        extra += "\n";
+        extra += link;
+    }
+    const size_t room = max_chars - text.size();
+    if (extra.size() > room) {
+        extra.resize(room);
+    }
+    return text + extra;
+}
+
 std::string format_hits(const std::vector<SearchHit> & hits) {
     std::string out;
     for (size_t i = 0; i < hits.size(); ++i) {

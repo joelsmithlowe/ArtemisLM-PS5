@@ -20,7 +20,8 @@ this tree. PS5LM's own release history is not repeated here.
   `UP9000-PPSA98010_00-ARTEMISLM0000001`. PS5LM and PS5LM Plus can stay
   installed. They keep using `/data/PS5LM/models`.
 - A home folder at `/data/ArtemisLM`. The first launch creates that folder,
-  `/data/ArtemisLM/models`, and `/data/ArtemisLM/cache`.
+  `/data/ArtemisLM/models`, `/data/ArtemisLM/cache`, `/data/ArtemisLM/projects`, and
+  `/data/ArtemisLM/memory`.
 - The library always reads `/data/ArtemisLM/models`. It also reads
   `/data/PS5LM/models`, the same PS5LM folder on an M.2 or USB drive,
   `ArtemisLM/models` on those drives, and a loose `.gguf` in the USB root.
@@ -47,7 +48,18 @@ this tree. PS5LM's own release history is not repeated here.
 - A calculator for a plain sum, on the TV and in the browser. A question that
   names two currencies also reads the European Central Bank rate.
 - Web search also runs for stock, score, forecast, population and bitcoin,
-  with weather, price, rate and the currency codes.
+  with weather, price, rate and the currency codes. A question that says
+  research or scrape also reads the text and the links of one result.
+- With file tools on, the browser chat can create a project in
+  `/data/ArtemisLM/projects`, next to the models folder. A project is a Node
+  server, a static page, or a Python program. The console stores the files
+  and reviews them in this process. It cannot start Node or Python. The
+  review has to pass before the reply calls the build ready. Copy the folder
+  off with FTP and run it on a computer. One file inside a project can be
+  deleted. The browser can list projects, scratch, models, USB, and the M.2.
+- Short notes live in `/data/ArtemisLM/memory`. Each note is kept as an
+  experimental hashed word vector, not loaded into the model. A later question
+  gets a note only when the words are close. The rest of the chat is unchanged.
 - The app checks GitHub at launch for a newer release of this repository.
   Settings, Sound and storage, App update, or the phone page, downloads that
   zip, checks its checksum, and installs it into `/data/homebrew/PPSA98010`,
@@ -57,7 +69,7 @@ this tree. PS5LM's own release history is not repeated here.
 - Settings on the TV and on the phone page for flash attention, context cap,
   cache type, prompt batch, slots, sampling, reply length, reasoning, the
   system prompt, and the library switches above.
-- Credits on the console, and an icon of a paper plane on a trail of code.
+- Credits on the console, and the app icon.
 
 ### Performance
 

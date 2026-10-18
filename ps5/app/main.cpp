@@ -48,6 +48,8 @@
 #include "fetch.hpp"
 #include "library.hpp"
 #include "market.hpp"
+#include "memory.hpp"
+#include "projects.hpp"
 #include "panel.hpp"
 #include "ports.hpp"
 #include "display.hpp"
@@ -637,6 +639,12 @@ int main(int, char **) {
     const int models_rc = mkdir(kModels, 0777);
     const int models_err = errno;
     mkdir("/data/ArtemisLM/cache", 0777);
+    // Same one-level mkdir as models. Coding tasks store projects here.
+    const int projects_rc = mkdir(ps5lm::kProjects, 0777);
+    const int projects_err = errno;
+    // Same one-level mkdir. Notes live here and stay out of the model until a question matches.
+    const int memory_rc = mkdir(ps5lm::kMemory, 0777);
+    const int memory_err = errno;
 
     // stdout and stderr to a file the PC can fetch over FTP.
     if (std::freopen(kLog, "w", stdout) != nullptr) {
@@ -648,6 +656,12 @@ int main(int, char **) {
     std::printf("artemislm-ps5: version " PS5LM_VERSION "\n");
     if (models_rc != 0 && models_err != EEXIST) {
         std::printf("artemislm-ps5: /data/ArtemisLM/models: %s\n", std::strerror(models_err));
+    }
+    if (projects_rc != 0 && projects_err != EEXIST) {
+        std::printf("artemislm-ps5: /data/ArtemisLM/projects: %s\n", std::strerror(projects_err));
+    }
+    if (memory_rc != 0 && memory_err != EEXIST) {
+        std::printf("artemislm-ps5: /data/ArtemisLM/memory: %s\n", std::strerror(memory_err));
     }
     // One device-local heap over the whole pool (RADV splits an APU's 2/3 to
     // 1/3), and a HOME for llama.cpp, which throws without one.

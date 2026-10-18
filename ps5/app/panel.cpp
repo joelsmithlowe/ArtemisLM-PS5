@@ -6,6 +6,9 @@
 #include "fetch.hpp"
 #include "library.hpp"
 #include "market.hpp"
+#include "files.hpp"
+#include "memory.hpp"
+#include "projects.hpp"
 #include "model_plan.hpp"
 #include "search_parse.hpp"
 #include "settings.hpp"
@@ -547,6 +550,27 @@ void handle(int fd, const std::string & method, const std::string & path, const 
         out = act_move(body);
     } else if (method == "POST" && route == "/remove") {
         out = act_remove(body);
+    } else if (method == "POST" && route == "/project") {
+        Settings s;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            s = load_settings(kSettingsPath);
+        }
+        out = s.tools ? project_call(kProjects, body) : std::string("{\"error\":\"File tools are off\"}");
+    } else if (method == "POST" && route == "/memory") {
+        Settings s;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            s = load_settings(kSettingsPath);
+        }
+        out = s.tools ? memory_call(kMemory, body) : std::string("{\"error\":\"File tools are off\"}");
+    } else if (method == "POST" && route == "/files") {
+        Settings s;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            s = load_settings(kSettingsPath);
+        }
+        out = s.tools ? files_call(files_roots(), body) : std::string("{\"error\":\"File tools are off\"}");
     } else if (method == "POST" && route == "/load") {
         out = act_load(body);
     } else if (method == "POST" && route == "/unload") {

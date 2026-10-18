@@ -194,10 +194,21 @@
 
 <script>
 (function () {
-  var SEARCH_WORDS = ['weather', 'price', 'rate', 'exchange', 'news', 'usd', 'aud', 'eur', 'gbp', 'jpy', 'cad', 'nzd', 'cny', 'stock', 'score', 'forecast', 'population', 'bitcoin'];
+  var SEARCH_WORDS = ['weather', 'price', 'rate', 'exchange', 'news', 'usd', 'aud', 'eur', 'gbp', 'jpy', 'cad', 'nzd', 'cny', 'stock', 'score', 'forecast', 'population', 'bitcoin', 'research', 'scrape'];
   var CLOCK_WORDS = ['today', 'tonight', 'now', 'current', 'latest', 'date', 'time', 'day', 'weather', 'price', 'rate', 'exchange'];
   var SKIP = { what: 1, whats: 1, is: 1, the: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, for: 1, me: 1, tell: 1, please: 1, right: 1, this: 1, it: 1, its: 1, and: 1, or: 1, do: 1, you: 1, can: 1, how: 1, about: 1, there: 1, here: 1, from: 1, with: 1, that: 1, my: 1, your: 1, our: 1, who: 1, when: 1, where: 1, why: 1, which: 1, today: 1, tonight: 1, now: 1, current: 1, latest: 1, date: 1, time: 1, day: 1, weather: 1, price: 1, rate: 1, exchange: 1, news: 1, console: 1, playstation: 1, ps5: 1, artemis: 1, artemislm: 1, phone: 1, clock: 1 };
   var TOOL_NAMES = { get_datetime: 1, web_search: 1, web_fetch: 1 };
+  var PROJECT_NAMES = { project_list: 1, project_create: 1, project_read: 1, project_write: 1, project_review: 1, project_remove: 1 };
+  var PROJECT_TOOL = { project_list: 'list', project_create: 'create', project_read: 'read', project_write: 'write', project_review: 'review', project_remove: 'remove' };
+  var MEMORY_NAMES = { memory_save: 1, memory_find: 1, memory_list: 1, memory_forget: 1 };
+  var MEMORY_TOOL = { memory_save: 'save', memory_find: 'find', memory_list: 'list', memory_forget: 'forget' };
+  var FILES_NAMES = { files_list: 1, files_read: 1 };
+  var FILES_TOOL = { files_list: 'list', files_read: 'read' };
+  var CODE_VERBS = ['create', 'build', 'write', 'make', 'add', 'fix', 'review', 'check', 'scaffold'];
+  var CODE_NOUNS = ['app', 'server', 'website', 'webpage', 'html', 'node', 'python', 'script', 'project', 'program'];
+  var SHELF_WORDS = ['file', 'files', 'folder', 'folders', 'usb', 'drive', 'scratch', 'project', 'projects', 'remember', 'memory', 'memories', 'note', 'notes', 'forget'];
+  var fileToolsOn = true;
+  var asked = '';
 
   var log = document.getElementById('log');
   var scroller = document.getElementById('scroll');
@@ -237,15 +248,24 @@
     }
     return false;
   }
-  // 'search' reads the clock and searches. 'clock' only reads the clock.
-  // 'none' goes straight to the model. "hello" is none. A rate today is search.
+  // 'code' saves a project when file tools are on. 'search' reads the clock
+  // and searches. 'clock' only reads the clock. 'none' goes straight to the model.
   function classify(raw) {
     var q = String(raw || '').toLowerCase();
+    if (fileToolsOn && anyWord(q, CODE_VERBS) && anyWord(q, CODE_NOUNS)) return 'code';
     var topical = anyWord(q, SEARCH_WORDS);
     var clockish = topical || anyWord(q, CLOCK_WORDS);
     if (!clockish) return 'none';
     if (topical || hasTopic(q)) return 'search';
     return 'clock';
+  }
+  function wantsRemember(raw) {
+    var q = trim(String(raw || '').toLowerCase());
+    if (q.indexOf('remember ') === 0 || q.indexOf('please remember ') === 0) return true;
+    if (!hasWord(q, 'remember')) return false;
+    if (q.indexOf('?') >= 0 || q.indexOf('do you remember') >= 0) return false;
+    if (hasWord(q, 'what') || hasWord(q, 'where') || hasWord(q, 'when') || hasWord(q, 'who') || hasWord(q, 'why') || hasWord(q, 'how')) return false;
+    return true;
   }
   function browserDay() {
     var d = new Date();
@@ -308,14 +328,16 @@
     return text;
   }
 
-  function systemText(withFetch) {
+  function systemText(kind) {
     var s = 'You are ArtemisLM PS5, running on a PlayStation 5. When the message includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed or has no figure, say so. Be direct.';
-    if (withFetch) s += ' Call web_fetch on one link only when the snippet is not enough.';
+    if (kind === 'search') s += ' Call web_fetch on one link only when the snippet is not enough. A question that says research or scrape already includes the text of one page.';
+    if (kind === 'code') s += ' File tools are on. Projects are folders in /data/ArtemisLM/projects, next to the models folder. Call project_create, then project_write for each source file, then project_review. Call project_remove to delete one file. It does not delete the project folder. Fix every review error before you say the build is ready. Kinds are node-server, static-page and python. Keep each file under 12000 characters. Allowed endings are .js .mjs .cjs .json .html .css .md .txt .py .svg. Put page script in a .js file. Do not use a JavaScript regex literal; use new RegExp. This console stores and reviews the files. It cannot start Node or Python. Tell the user the folder path and the command to run on a computer.';
     return s;
   }
 
-  function evidence(text, clock, search, math) {
+  function evidence(text, clock, search, math, memory) {
     var parts = [];
+    if (memory) parts.push(memory);
     if (clock) parts.push(clock);
     if (math) parts.push(math);
     if (search) parts.push(search);
@@ -398,21 +420,84 @@
     return 'Calculation: ' + src + ' = ' + shown;
   }
 
+  function projectDefs() {
+    return [
+      { type: 'function', function: { name: 'project_list', description: 'List projects in /data/ArtemisLM/projects, or the files in one project.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Project name. Empty lists every project.' } } } } },
+      { type: 'function', function: { name: 'project_create', description: 'Create a project folder and a small starter. Kinds: node-server, static-page, python.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Folder name: a letter or digit, then letters, digits, _ or -, up to 32.' }, kind: { type: 'string', description: 'node-server, static-page, or python' } }, required: ['name', 'kind'] } } },
+      { type: 'function', function: { name: 'project_read', description: 'Read one file from a project.', parameters: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string', description: 'Relative path inside the project' } }, required: ['name', 'path'] } } },
+      { type: 'function', function: { name: 'project_write', description: 'Write one text file inside a project. Overwrites. At most 12000 characters.', parameters: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' }, text: { type: 'string' } }, required: ['name', 'path', 'text'] } } },
+      { type: 'function', function: { name: 'project_review', description: 'Check the project files in this process. A passing review still does not run Node or Python.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
+      { type: 'function', function: { name: 'project_remove', description: 'Delete one file inside a project. Does not delete the project folder.', parameters: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'] } } }
+    ];
+  }
+  function shelfDefs() {
+    return [
+      { type: 'function', function: { name: 'memory_save', description: 'Save a short note on this console. It is kept as a hashed word vector and is added to a later chat only when the question matches.', parameters: { type: 'object', properties: { text: { type: 'string', description: 'The note, up to 400 characters' } }, required: ['text'] } } },
+      { type: 'function', function: { name: 'memory_find', description: 'Find notes whose words are close to this question. Returns nothing when none are close.', parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } } },
+      { type: 'function', function: { name: 'memory_list', description: 'List the short notes stored on this console.', parameters: { type: 'object', properties: {} } } },
+      { type: 'function', function: { name: 'memory_forget', description: 'Delete one note by id, or by text when the words are very close.', parameters: { type: 'object', properties: { id: { type: 'string' }, text: { type: 'string' } } } } },
+      { type: 'function', function: { name: 'files_list', description: 'List one folder the console can already see: projects, scratch, models, usb0, usb1, or m2.', parameters: { type: 'object', properties: { root: { type: 'string', description: 'projects, scratch, models, usb0, usb1, or m2' }, path: { type: 'string', description: 'Optional folder inside that root' } }, required: ['root'] } } },
+      { type: 'function', function: { name: 'files_read', description: 'Read one text file inside projects, scratch, models, usb0, usb1, or m2. Refuses programs and model files.', parameters: { type: 'object', properties: { root: { type: 'string' }, path: { type: 'string' } }, required: ['root', 'path'] } } }
+    ];
+  }
   function defsFor(kind) {
-    var want = kind === 'search' ? { web_fetch: 1 } : {};
     var out = [];
-    for (var i = 0; i < toolDefs.length; i++) {
-      var def = toolDefs[i];
-      var name = def && def.function && def.function.name;
-      if (want[name]) out.push(def);
+    if (kind === 'code') out = projectDefs();
+    else if (kind === 'search') {
+      var params = { type: 'object', properties: { url: { type: 'string', description: 'The address to open' } }, required: ['url'] };
+      for (var i = 0; i < toolDefs.length; i++) {
+        var def = toolDefs[i];
+        var name = def && def.function && def.function.name;
+        if (name === 'web_fetch' && def.function.parameters) params = def.function.parameters;
+      }
+      out.push({ type: 'function', function: { name: 'web_fetch', description: 'Open one http or https page and return its text and links.', parameters: params } });
     }
-    if (kind === 'search' && !out.length) {
-      out.push({ type: 'function', function: { name: 'web_fetch', description: 'Open one http or https page and return its text.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'The address to open' } }, required: ['url'] } } });
+    if (fileToolsOn && kind !== 'code' && anyWord(String(asked || '').toLowerCase(), SHELF_WORDS)) {
+      var shelf = shelfDefs();
+      for (var s = 0; s < shelf.length; s++) out.push(shelf[s]);
     }
     return out;
   }
 
   function callTool(name, params, done) {
+    if (PROJECT_NAMES[name]) {
+      var body = {
+        tool: PROJECT_TOOL[name],
+        name: params && params.name ? params.name : '',
+        kind: params && params.kind ? params.kind : '',
+        path: params && params.path ? params.path : '',
+        text: params && typeof params.text === 'string' ? params.text : ''
+      };
+      panelSend('POST', '/project', body, function (status, data) {
+        if (status === 200 && data && typeof data.error !== 'string') done(null, data);
+        else done(errText(status, data), data);
+      });
+      return;
+    }
+    if (MEMORY_NAMES[name]) {
+      var remembered = {
+        tool: MEMORY_TOOL[name],
+        text: params && typeof params.text === 'string' ? params.text : '',
+        id: params && params.id ? params.id : ''
+      };
+      panelSend('POST', '/memory', remembered, function (status, data) {
+        if (status === 200 && data && typeof data.error !== 'string') done(null, data);
+        else done(errText(status, data), data);
+      });
+      return;
+    }
+    if (FILES_NAMES[name]) {
+      var folder = {
+        tool: FILES_TOOL[name],
+        root: params && params.root ? params.root : '',
+        path: params && params.path ? params.path : ''
+      };
+      panelSend('POST', '/files', folder, function (status, data) {
+        if (status === 200 && data && typeof data.error !== 'string') done(null, data);
+        else done(errText(status, data), data);
+      });
+      return;
+    }
     postJson('/tools', { tool: name, params: params || {} }, function (status, data) {
       if (status === 200 && data && typeof data.error !== 'string') done(null, data);
       else done(errText(status, data), data);
@@ -428,13 +513,34 @@
     if (call.name === 'web_search' && !params.query) params.query = call.args || '';
     callTool(call.name, params, function (error, data) {
       var shown = error ? error : JSON.stringify(data);
+      var soft = false;
       if (!error && data) {
         if (typeof data.results === 'string') shown = data.results;
-        else if (typeof data.text === 'string') shown = data.text;
+        else if (data.hits) {
+          var hitLines = [];
+          for (var h = 0; h < data.hits.length; h++) if (data.hits[h] && data.hits[h].text) hitLines.push(data.hits[h].text);
+          shown = hitLines.length ? hitLines.join('\n') : 'No notes are close.';
+        } else if (data.entries) {
+          var entryLines = [];
+          for (var e = 0; e < data.entries.length; e++) {
+            if (!data.entries[e] || !data.entries[e].name) continue;
+            entryLines.push(data.entries[e].name + (data.entries[e].kind === 'dir' ? '/' : ''));
+          }
+          shown = entryLines.join('\n');
+          if (data.note) shown = (shown ? shown + '\n' : '') + data.note;
+        } else if (data.notes) {
+          var noteLines = [];
+          for (var n = 0; n < data.notes.length; n++) if (data.notes[n] && data.notes[n].text) noteLines.push(data.notes[n].text);
+          shown = noteLines.length ? noteLines.join('\n') : 'No notes.';
+        } else if (typeof data.text === 'string' && !data.errors) shown = data.text;
         else if (typeof data.local === 'string') shown = data.local;
         else if (typeof data.datetime === 'string') shown = data.datetime;
+        else if (data.errors || typeof data.note === 'string') {
+          shown = JSON.stringify({ ok: data.ok, kind: data.kind, files: data.files, errors: data.errors, note: data.note, projects: data.projects, path: data.path, bytes: data.bytes, name: data.name });
+          if (data.ok === false) soft = true;
+        }
       }
-      done(error, shown);
+      done(error || (soft ? 'Review found errors' : null), shown);
     });
   }
 
@@ -489,7 +595,7 @@
       if (turn && turn.cancelled) return finishStop(holder, body);
       var usable = [];
       for (var i = 0; i < calls.length; i++) {
-        if (calls[i] && calls[i].name && TOOL_NAMES[calls[i].name]) usable.push(calls[i]);
+        if (calls[i] && calls[i].name && offered(tools, calls[i].name)) usable.push(calls[i]);
       }
       if (req.status && req.status !== 200 && !body) {
         var parsed = null;
@@ -497,8 +603,17 @@
         fail(holder, errText(req.status, parsed));
         return;
       }
-      if (usable.length > 2) usable = usable.slice(0, 2);
-      if (usable.length && round < 2 && tools.length) {
+      var rounds = 2;
+      var batch = 2;
+      if (offered(tools, 'project_review')) {
+        rounds = 8;
+        batch = 4;
+      } else if (offered(tools, 'files_list') || offered(tools, 'memory_forget')) {
+        rounds = 3;
+        batch = 2;
+      }
+      if (usable.length > batch) usable = usable.slice(0, batch);
+      if (usable.length && round < rounds && tools.length) {
         var assistant = { role: 'assistant', content: body || '', tool_calls: [] };
         for (var k = 0; k < usable.length; k++) {
           if (!usable[k].id) usable[k].id = 'call_' + round + '_' + k;
@@ -511,7 +626,21 @@
           if (step >= usable.length) return streamAnswer(holder, messages, tools, round + 1);
           var call = usable[step];
           step += 1;
-          var label = call.name === 'web_fetch' ? 'Open page' : call.name === 'web_search' ? 'Web search' : 'Date and time';
+          var label = 'Date and time';
+          if (call.name === 'web_fetch') label = 'Open page';
+          else if (call.name === 'web_search') label = 'Web search';
+          else if (call.name === 'project_create') label = 'Create project';
+          else if (call.name === 'project_write') label = 'Write file';
+          else if (call.name === 'project_read') label = 'Read file';
+          else if (call.name === 'project_list') label = 'List projects';
+          else if (call.name === 'project_review') label = 'Review build';
+          else if (call.name === 'project_remove') label = 'Delete file';
+          else if (call.name === 'memory_save') label = 'Save note';
+          else if (call.name === 'memory_find') label = 'Find notes';
+          else if (call.name === 'memory_list') label = 'List notes';
+          else if (call.name === 'memory_forget') label = 'Forget note';
+          else if (call.name === 'files_list') label = 'Browse folder';
+          else if (call.name === 'files_read') label = 'Read stored file';
           var slot = addTool(holder.tools, label, 'Running ' + call.name + '…', false);
           runToolCall(call, function (error, shown) {
             slot.textContent = shown;
@@ -588,19 +717,52 @@
     history.push({ role: 'user', content: text });
     if (history.length > 16) history = history.slice(history.length - 16);
 
+    asked = text;
     var kind = classify(text);
     var holder = { tools: tools, answer: answer, caret: caret };
     turn = { cancelled: false };
     busy(true);
 
     var math = mathNote(text);
-    function ask(clockNote, searchNote) {
+    function sendAsk(clockNote, searchNote, memoryNote) {
       if (!turn || turn.cancelled) return finishStop(holder, '');
       var prior = history.slice(0, history.length - 1);
-      var messages = [{ role: 'system', content: systemText(kind === 'search') }];
+      var messages = [{ role: 'system', content: systemText(kind) }];
       for (var i = 0; i < prior.length; i++) messages.push(prior[i]);
-      messages.push({ role: 'user', content: evidence(text, clockNote, searchNote, math) });
+      messages.push({ role: 'user', content: evidence(text, clockNote, searchNote, math, memoryNote) });
       streamAnswer(holder, messages, defsFor(kind), 0);
+    }
+    function ask(clockNote, searchNote) {
+      if (!turn || turn.cancelled) return finishStop(holder, '');
+      if (!fileToolsOn) return sendAsk(clockNote, searchNote, '');
+      if (wantsRemember(text)) {
+        var saved = addTool(tools, 'Save note', 'Saving a note on this console…', false);
+        panelSend('POST', '/memory', { tool: 'save', text: text }, function (status, data) {
+          if (!turn || turn.cancelled) return finishStop(holder, '');
+          if (status === 200 && data && typeof data.error !== 'string') saved.textContent = data.text || 'Saved.';
+          else {
+            saved.textContent = errText(status, data);
+            saved.parentNode.className = 'tool bad';
+          }
+          sendAsk(clockNote, searchNote, '');
+        });
+        return;
+      }
+      panelSend('POST', '/memory', { tool: 'find', text: text }, function (status, data) {
+        if (!turn || turn.cancelled) return finishStop(holder, '');
+        var memoryNote = '';
+        if (status === 200 && data && data.hits && data.hits.length) {
+          var lines = [];
+          for (var i = 0; i < data.hits.length; i++) {
+            if (data.hits[i] && data.hits[i].text) lines.push('- ' + data.hits[i].text);
+          }
+          if (lines.length) {
+            memoryNote = 'Notes saved on this console:\n' + lines.join('\n');
+            addTool(tools, 'Notes', lines.join('\n'), false);
+          }
+        }
+        sendAsk(clockNote, searchNote, memoryNote);
+      });
     }
 
     function afterClock(clockNote, day) {
@@ -619,7 +781,7 @@
     }
 
     if (math) addTool(tools, 'Calculation', math.replace('Calculation: ', ''), false);
-    if (kind === 'none') return ask('', '');
+    if (kind === 'none' || kind === 'code') return ask('', '');
     var slotClock = addTool(tools, 'Date and time', 'Reading the console clock…', false);
     callTool('get_datetime', {}, function (error, data) {
       if (!turn || turn.cancelled) return finishStop(holder, '');
@@ -762,6 +924,16 @@
     };
     req.onerror = function () { done(0, null, ''); };
     req.send(body ? JSON.stringify(body) : null);
+  }
+  panelSend('GET', '/settings', null, function (code, data) {
+    if (data && typeof data.tools === 'boolean') fileToolsOn = data.tools;
+  });
+  function offered(tools, name) {
+    for (var i = 0; i < tools.length; i++) {
+      var fn = tools[i] && tools[i].function;
+      if (fn && fn.name === name) return true;
+    }
+    return false;
   }
   function gib(n) {
     var v = Number(n);
@@ -980,6 +1152,7 @@
     box.onchange = function () {
       var body = {};
       body[key] = box.checked;
+      if (key === 'tools') fileToolsOn = box.checked;
       saveSetting(body);
     };
     wrap.appendChild(box);
@@ -1050,7 +1223,8 @@
       ]);
       addCheck(form, 'Web search', 'web_search', data.web_search);
       addCheck(form, 'Date and time', 'datetime', data.datetime);
-      addCheck(form, 'File tools', 'tools', data.tools);
+      fileToolsOn = !!data.tools;
+      addCheck(form, 'File tools, projects, and notes', 'tools', data.tools);
       var folderNote = document.createElement('p');
       folderNote.className = 'note';
       folderNote.textContent = 'A folder that already has models. It must be under /data or /mnt.';

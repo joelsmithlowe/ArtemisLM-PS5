@@ -33,6 +33,12 @@ std::vector<SearchHit> parse_searxng(const std::string & json, int limit);
 // collapsed. Already-plain text is returned trimmed.
 std::string html_to_text(const std::string & html, size_t max_chars);
 
+// http and https links in the page, scripts and styles skipped.
+std::vector<std::string> html_links(const std::string & html, int limit);
+
+// Visible text, then up to a few links. Used when a page is opened for research.
+std::string html_page(const std::string & html, size_t max_chars);
+
 std::string format_hits(const std::vector<SearchHit> & hits);
 
 // A question that is only arithmetic, such as "What is 17 times 23?".

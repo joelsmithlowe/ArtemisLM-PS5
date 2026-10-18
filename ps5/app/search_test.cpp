@@ -71,6 +71,11 @@ int main() {
                text.find("World") != std::string::npos && text.find("secret") == std::string::npos,
            "html text");
     expect(html_to_text("plain   words", 100) == "plain words", "plain");
+    const std::string page_html = html_page(
+        "<p>Hello</p><a href=\"https://example.com/a\">A</a><script>https://evil.example/x</script>", 2000);
+    expect(page_html.find("Hello") != std::string::npos, "page hello");
+    expect(page_html.find("https://example.com/a") != std::string::npos, "page link");
+    expect(page_html.find("evil.example") == std::string::npos, "page skips script");
 
     const std::string formatted = format_hits(hits);
     expect(formatted.find("1. Example & Co") == 0 && formatted.find("https://example.com/a") != std::string::npos, "format");

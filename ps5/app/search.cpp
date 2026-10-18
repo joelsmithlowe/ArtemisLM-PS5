@@ -169,7 +169,7 @@ LiveKind classify(std::string q) {
     }
     static const char * search_words[] = { "weather", "price", "rate", "exchange", "news", "usd", "aud", "eur",
                                             "gbp", "jpy", "cad", "nzd", "cny", "stock", "score", "forecast",
-                                            "population", "bitcoin" };
+                                            "population", "bitcoin", "research", "scrape" };
     static const char * clock_words[] = { "today", "tonight", "now", "current", "latest", "date", "time", "day",
                                            "weather", "price", "rate", "exchange" };
     const bool topical = any_word(q, search_words, sizeof(search_words) / sizeof(search_words[0]));
@@ -343,7 +343,21 @@ extern "C" int ps5lm_web_search(const char * query, int num_results, char * out,
         finish(out, out_cap, error.empty() ? "no results" : "web search failed: " + error);
         return -1;
     }
-    finish(out, out_cap, rate.empty() ? ps5lm::format_hits(hits) : rate + "\n" + ps5lm::format_hits(hits));
+    std::string text = rate.empty() ? ps5lm::format_hits(hits) : rate + "\n" + ps5lm::format_hits(hits);
+    std::string lower = query;
+    for (char & c : lower) {
+        c = (char) std::tolower((unsigned char) c);
+    }
+    // One result page, and only when the question asked for research or a scrape.
+    // get_text, not ps5lm_web_fetch: this function already holds g_search.
+    if ((has_word(lower, "research") || has_word(lower, "scrape")) && http_url(hits[0].url)) {
+        std::string page_error;
+        const std::string raw = get_text(hits[0].url, 256u << 10, &page_error);
+        if (!raw.empty()) {
+            text += "\n\nPage (" + hits[0].url + "):\n" + ps5lm::html_page(raw, 2500);
+        }
+    }
+    finish(out, out_cap, text);
     return 0;
 }
 
@@ -359,9 +373,9 @@ extern "C" int ps5lm_web_fetch(const char * url, char * out, size_t out_cap) {
         finish(out, out_cap, error.empty() ? "empty page" : "could not open the page: " + error);
         return -1;
     }
-    // A few thousand characters: long enough to answer from, short enough
-    // that one fetch does not fill the context on its own.
-    finish(out, out_cap, ps5lm::html_to_text(body, 6000));
+    // Text plus a few links. Long enough to answer from, short enough that
+    // one fetch does not fill the context on its own.
+    finish(out, out_cap, ps5lm::html_page(body, 6000));
     return 0;
 }
 
