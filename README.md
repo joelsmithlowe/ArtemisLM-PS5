@@ -5,7 +5,7 @@
 <h1 align="center">ArtemisLM PS5</h1>
 
 <p align="center">
-  <b>A language model that lives on the console, by Joel Smith-Lowe.</b><br>
+  <b>A language model that lives on the console.</b><br>
   The PlayStation runs the model. A phone or a computer on the same network opens the chat, the library and the settings.
 </p>
 
