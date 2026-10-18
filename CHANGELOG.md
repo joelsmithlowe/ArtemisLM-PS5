@@ -1,12 +1,21 @@
 # Changelog
 
-ArtemisLM PS5 0.12.3, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.3.zip`.
-`contentVersion` is `01.012.003`. A newer release installs from Settings, or by
+ArtemisLM PS5 0.12.4, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.4.zip`.
+`contentVersion` is `01.012.004`. A newer release installs from Settings, or by
 copying the `PPSA98010` folder over the installed one.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.4] - 2026-10-19
+
+### Fixed
+
+- A saved `/data/ArtemisLM/app-args.txt` that still names port 47281 is started
+  on 8081. That file is what makes llama-server log "couldn't bind HTTP server
+  socket, hostname: 0.0.0.0, port: 47281". The first line of app.log names the
+  version and both ports. A library port that is already taken says so.
 
 ## [0.12.3] - 2026-10-19
 

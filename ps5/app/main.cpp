@@ -165,6 +165,41 @@ constexpr const char * kModels      = "/data/ArtemisLM/models";
 constexpr const char * kAssets      = "/app0/assets";
 constexpr int          kPort        = kChatPort;
 
+// The page, the dashboard and the phone all use kChatPort. app-args.txt is
+// allowed to replace the planner, but a saved --port 47281 binds a port this
+// console does not accept and the television still shows 8081.
+bool pin_listen(std::vector<std::string> & args) {
+    bool changed = false;
+    auto set_flag = [&](const char * flag, const char * value) {
+        const std::string prefix = std::string(flag) + "=";
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (args[i] == flag && i + 1 < args.size()) {
+                if (args[i + 1] != value) {
+                    std::printf("artemislm-ps5: %s %s replaced with %s\n", flag, args[i + 1].c_str(), value);
+                    args[i + 1] = value;
+                    changed = true;
+                }
+                return true;
+            }
+            if (args[i].compare(0, prefix.size(), prefix) == 0) {
+                if (args[i] != prefix + value) {
+                    std::printf("artemislm-ps5: %s replaced with %s\n", args[i].c_str(), (prefix + value).c_str());
+                    args[i] = prefix + value;
+                    changed = true;
+                }
+                return true;
+            }
+        }
+        args.insert(args.end(), { flag, value });
+        changed = true;
+        return false;
+    };
+    const std::string port = std::to_string(kChatPort);
+    set_flag("--host", "0.0.0.0");
+    set_flag("--port", port.c_str());
+    return changed;
+}
+
 // The last lines of a log, up to about 64 KiB of it, oldest first.
 std::vector<std::string> tail_lines(const char * path) {
     std::vector<std::string> lines;
@@ -707,7 +742,7 @@ int main(int, char **) {
     if (std::freopen(kLog, "a", stderr) != nullptr) {
         setvbuf(stderr, nullptr, _IONBF, 0);
     }
-    std::printf("artemislm-ps5: version " PS5LM_VERSION "\n");
+    std::printf("artemislm-ps5: version " PS5LM_VERSION ", chat %d, library %d\n", kChatPort, kLibraryPort);
     if (models_rc != 0 && models_err != EEXIST) {
         std::printf("artemislm-ps5: /data/ArtemisLM/models: %s\n", std::strerror(models_err));
     }
@@ -863,6 +898,21 @@ int main(int, char **) {
                 std::printf("artemislm-ps5: loading without %s\n", mm + 1 != args.end() ? (mm + 1)->c_str() : "the projector");
                 args.erase(mm, std::min(mm + 2, args.end()));
                 model_part.args = args;
+            }
+        }
+        if (!args.empty()) {
+            // Only a file that already named a different port is rewritten.
+            // The planner's own arguments already use kChatPort.
+            const bool from_file = access(kArgs, F_OK) == 0;
+            if (pin_listen(args)) {
+                model_part.args = args;
+                if (from_file) {
+                    std::ofstream out(kArgs, std::ios::trunc);
+                    for (const auto & a : args) {
+                        out << a << '\n';
+                    }
+                    std::printf("artemislm-ps5: app-args.txt now listens on port %d\n", kChatPort);
+                }
             }
         }
         log_memory("before loading");

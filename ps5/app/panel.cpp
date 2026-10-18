@@ -1018,7 +1018,8 @@ void serve() {
         if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 16) != 0) {
             const int err = errno;
             if (logged < 3 || logged % 10 == 0) {
-                std::printf("artemislm-ps5: library port %d is not open, errno %d\n", kPanelPort, err);
+                std::printf("artemislm-ps5: library port %d is not open, errno %d%s\n", kPanelPort, err,
+                            err == EADDRINUSE ? " (already in use)" : "");
             }
             logged++;
             close(srv);
@@ -1247,7 +1248,8 @@ void serve_page(const std::function<void(const std::string &)> & note) {
             std::printf("artemislm-ps5: page port %d is not open, errno %d\n", kPagePort, err);
             if (note) {
                 char text[80];
-                std::snprintf(text, sizeof(text), "Port %d did not open, errno %d", kPagePort, err);
+                std::snprintf(text, sizeof(text), "Port %d did not open, errno %d%s", kPagePort, err,
+                              err == EADDRINUSE ? ", already in use" : "");
                 note(text);
             }
             close(srv);
