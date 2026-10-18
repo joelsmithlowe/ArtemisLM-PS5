@@ -130,7 +130,7 @@ std::string hex_lower(std::string text) {
 }
 
 bool url_ok(const std::string & url, const std::string & asset) {
-    const std::string prefix = "https://github.com/joelsmithlowe/ArtemisLM/releases/download/";
+    const std::string prefix = "https://github.com/joelsmithlowe/ArtemisLM-PS5/releases/download/";
     const std::string tail = "/" + asset;
     if (url.size() <= prefix.size() + tail.size()) {
         return false;
@@ -514,7 +514,7 @@ bool parse_release(const std::string & body, ReleaseInfo * out, std::string * er
         set_error(error, "The release has no app zip");
         return false;
     }
-    const std::string want = "artemislm-app-v" + tag + ".zip";
+    const std::string want = "artemislm-ps5-app-v" + tag + ".zip";
     const nlohmann::json * asset = nullptr;
     for (const auto & one : j["assets"]) {
         if (!one.is_object() || !one.contains("name") || !one["name"].is_string()) {
@@ -616,15 +616,15 @@ bool stage_ok(const std::string & dest, std::string * error) {
     const fs::path param = fs::path(dest) / "sce_sys" / "param.json";
     FILE * f = std::fopen(param.string().c_str(), "rb");
     if (!f) {
-        set_error(error, "The zip is not ArtemisLM");
+        set_error(error, "The zip is not ArtemisLM PS5");
         return false;
     }
     char buf[65536];
     const size_t n = std::fread(buf, 1, sizeof(buf), f);
     std::fclose(f);
     const std::string text(buf, n);
-    if (text.find("PPSA98010") == std::string::npos || text.find("ArtemisLM") == std::string::npos) {
-        set_error(error, "The zip is not ArtemisLM");
+    if (text.find("PPSA98010") == std::string::npos || text.find("ArtemisLM PS5") == std::string::npos) {
+        set_error(error, "The zip is not ArtemisLM PS5");
         return false;
     }
     return true;
@@ -635,7 +635,7 @@ bool install_title(const std::string & stage, const std::string & install_dir, s
     std::error_code ec;
     const fs::path install(install_dir);
     if (!fs::is_directory(install.parent_path(), ec)) {
-        set_error(error, "Copy ArtemisLM to /data/homebrew once, then updates can install");
+        set_error(error, "Copy ArtemisLM PS5 to /data/homebrew once, then updates can install");
         return false;
     }
     if (install_dir.find("..") != std::string::npos || stage.find("..") != std::string::npos) {

@@ -9,7 +9,7 @@
 
 namespace ps5lm {
 
-constexpr const char * kUpdateRepo = "joelsmithlowe/ArtemisLM";
+constexpr const char * kUpdateRepo = "joelsmithlowe/ArtemisLM-PS5";
 constexpr const char * kInstallDir = "/data/homebrew/PPSA98010";
 constexpr const char * kUpdateDir  = "/data/ArtemisLM/update";
 
@@ -25,7 +25,7 @@ struct ReleaseInfo {
 int version_cmp(const std::string & a, const std::string & b);
 
 // The latest-release JSON from api.github.com. The zip must be named
-// artemislm-app-v<version>.zip on this repository.
+// artemislm-ps5-app-v<version>.zip on this repository.
 bool parse_release(const std::string & json, ReleaseInfo * out, std::string * error);
 
 // Unpacks PPSA98010/ from a zip into `dest` (dest/eboot.bin). A path that

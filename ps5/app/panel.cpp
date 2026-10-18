@@ -231,7 +231,7 @@ std::string artemis_json() {
     }
     const std::string ip = local_address();
     nlohmann::json out = {
-        { "name", "ArtemisLM" },
+        { "name", "ArtemisLM PS5" },
         { "version", PS5LM_VERSION },
         { "chat_port", kChatPort },
         { "library_port", kLibraryPort },
@@ -622,7 +622,7 @@ std::string read_request(int fd, std::string * method, std::string * path, std::
 void serve() {
     const int srv = socket(AF_INET, SOCK_STREAM, 0);
     if (srv < 0) {
-        std::printf("ps5lm-app: library port failed to open\n");
+        std::printf("artemislm-ps5: library port failed to open\n");
         return;
     }
     int on = 1;
@@ -635,11 +635,11 @@ void serve() {
     addr.sin_port = htons((uint16_t) kPanelPort);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 4) != 0) {
-        std::printf("ps5lm-app: library port %d is in use\n", kPanelPort);
+        std::printf("artemislm-ps5: library port %d is in use\n", kPanelPort);
         close(srv);
         return;
     }
-    std::printf("ps5lm-app: library on port %d\n", kPanelPort);
+    std::printf("artemislm-ps5: library on port %d\n", kPanelPort);
     for (;;) {
         const int fd = accept(srv, nullptr, nullptr);
         if (fd < 0) {
@@ -709,11 +709,11 @@ void reply_raw(int fd, int code, const char * type, const std::string & body, bo
 void serve_page() {
     const std::string page = load_page_file();
     if (page.empty()) {
-        std::printf("ps5lm-app: %s is missing\n", kPageFile);
+        std::printf("artemislm-ps5: %s is missing\n", kPageFile);
     }
     const int srv = socket(AF_INET, SOCK_STREAM, 0);
     if (srv < 0) {
-        std::printf("ps5lm-app: page port failed to open\n");
+        std::printf("artemislm-ps5: page port failed to open\n");
         return;
     }
     int on = 1;
@@ -726,11 +726,11 @@ void serve_page() {
     addr.sin_port = htons((uint16_t) kPagePort);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 4) != 0) {
-        std::printf("ps5lm-app: page port %d is in use\n", kPagePort);
+        std::printf("artemislm-ps5: page port %d is in use\n", kPagePort);
         close(srv);
         return;
     }
-    std::printf("ps5lm-app: page on port %d, no model loaded\n", kPagePort);
+    std::printf("artemislm-ps5: page on port %d, no model loaded\n", kPagePort);
     for (;;) {
         const int fd = accept(srv, nullptr, nullptr);
         if (fd < 0) {
@@ -749,7 +749,7 @@ void serve_page() {
             const bool head = method == "HEAD";
             const bool read = method == "GET" || head;
             const bool page_get = read && (route == "/" || route == "/index.html");
-            const std::string idle_info = std::string("{\"name\":\"ArtemisLM\",\"version\":\"") + PS5LM_VERSION +
+            const std::string idle_info = std::string("{\"name\":\"ArtemisLM PS5\",\"version\":\"") + PS5LM_VERSION +
                                           "\",\"chat_port\":" + std::to_string(kChatPort) +
                                           ",\"library_port\":" + std::to_string(kLibraryPort) + ",\"model\":null}";
             if (page_get && !page.empty()) {

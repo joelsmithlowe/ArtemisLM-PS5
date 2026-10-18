@@ -124,7 +124,7 @@ std::string make_zip(const std::vector<ZFile> & files) {
     return out;
 }
 
-const char * kParam = "{\"titleId\":\"PPSA98010\",\"titleName\":\"ArtemisLM\"}";
+const char * kParam = "{\"titleId\":\"PPSA98010\",\"titleName\":\"ArtemisLM PS5\"}";
 
 void write_bytes(const std::string & path, const std::string & body) {
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
@@ -168,34 +168,34 @@ void check_parse() {
         "\"tag_name\":\"v0.9.1\","
         "\"assets\":["
         "{\"name\":\"notes.txt\",\"browser_download_url\":\"https://example.com/x\",\"digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},"
-        "{\"name\":\"artemislm-app-v0.9.1.zip\","
-        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM/releases/download/v0.9.1/artemislm-app-v0.9.1.zip\","
+        "{\"name\":\"artemislm-ps5-app-v0.9.1.zip\","
+        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM-PS5/releases/download/v0.9.1/artemislm-ps5-app-v0.9.1.zip\","
         "\"digest\":\"SHA256:0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF\"}"
         "]}";
     expect(parse_release(ok, &info, &error), "parse good release");
     expect(info.version == "0.9.1", "version");
-    expect(info.name == "artemislm-app-v0.9.1.zip", "asset name");
+    expect(info.name == "artemislm-ps5-app-v0.9.1.zip", "asset name");
     expect(info.sha256 == "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "digest lower");
-    expect(info.url.find("github.com/joelsmithlowe/ArtemisLM/releases/download/") != std::string::npos, "url host");
+    expect(info.url.find("github.com/joelsmithlowe/ArtemisLM-PS5/releases/download/") != std::string::npos, "url host");
 
     expect(!parse_release("{", &info, &error) && error == "Could not read the release", "bad json");
     const char * wrong_name =
-        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-app-v0.9.0.zip\","
-        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM/releases/download/v0.9.1/artemislm-app-v0.9.0.zip\","
+        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-ps5-app-v0.9.0.zip\","
+        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM-PS5/releases/download/v0.9.1/artemislm-ps5-app-v0.9.0.zip\","
         "\"digest\":\"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}]}";
     expect(!parse_release(wrong_name, &info, &error) && error == "The release has no app zip", "wrong asset");
     const char * no_sum =
-        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-app-v0.9.1.zip\","
-        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM/releases/download/v0.9.1/artemislm-app-v0.9.1.zip\"}]}";
+        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-ps5-app-v0.9.1.zip\","
+        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM-PS5/releases/download/v0.9.1/artemislm-ps5-app-v0.9.1.zip\"}]}";
     expect(!parse_release(no_sum, &info, &error) && error == "The release has no checksum", "no digest");
     const char * evil_host =
-        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-app-v0.9.1.zip\","
-        "\"browser_download_url\":\"https://evil.example/artemislm-app-v0.9.1.zip\","
+        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-ps5-app-v0.9.1.zip\","
+        "\"browser_download_url\":\"https://evil.example/artemislm-ps5-app-v0.9.1.zip\","
         "\"digest\":\"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}]}";
     expect(!parse_release(evil_host, &info, &error) && error == "The download address is not this repository", "wrong host");
     const char * dots =
-        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-app-v0.9.1.zip\","
-        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM/releases/download/../v0.9.1/artemislm-app-v0.9.1.zip\","
+        "{\"tag_name\":\"v0.9.1\",\"assets\":[{\"name\":\"artemislm-ps5-app-v0.9.1.zip\","
+        "\"browser_download_url\":\"https://github.com/joelsmithlowe/ArtemisLM-PS5/releases/download/../v0.9.1/artemislm-ps5-app-v0.9.1.zip\","
         "\"digest\":\"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}]}";
     expect(!parse_release(dots, &info, &error), "dotdot url");
 }
@@ -237,7 +237,7 @@ void check_zip(const std::string & root) {
         title_file("PPSA98010/sce_sys/param.json", bad_param),
     }));
     expect(extract_title_zip(dir + "/wrong.zip", dir + "/wrong", &error), "extract wrong title");
-    expect(!stage_ok(dir + "/wrong", &error) && error == "The zip is not ArtemisLM", "rejects other title");
+    expect(!stage_ok(dir + "/wrong", &error) && error == "The zip is not ArtemisLM PS5", "rejects other title");
 
     const std::string home = dir + "/homebrew";
     std::filesystem::create_directories(home);

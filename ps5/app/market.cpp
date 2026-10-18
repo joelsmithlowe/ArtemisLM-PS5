@@ -316,7 +316,7 @@ bool Market::enqueue(const MarketJob & job, double free) {
         std::snprintf(text, sizeof(text), "Not enough space: %s needs %.1f GiB and 1 GiB spare, %s has %.1f GiB free",
                       job.file.c_str(), job.bytes / 1073741824.0, job.dir.c_str(), free);
         view_.note = text;
-        std::printf("ps5lm-app: download %s/%s: %s\n", job.repo.c_str(), job.file.c_str(), text);
+        std::printf("artemislm-ps5: download %s/%s: %s\n", job.repo.c_str(), job.file.c_str(), text);
         return false;
     }
     Download d;
@@ -512,7 +512,7 @@ bool Market::fetch(Download & d) {
                           r.status > 0 && !r.error.empty() ? ", " : "", r.error.c_str());
             last_error = text;
             const int f = ++failures;
-            std::printf("ps5lm-app: download %s: piece at %llu stopped after %llu bytes: %s\n", d.file.c_str(),
+            std::printf("artemislm-ps5: download %s: piece at %llu stopped after %llu bytes: %s\n", d.file.c_str(),
                         (unsigned long long) off, (unsigned long long) got, text);
             // A 4xx other than 408/429 will not get better by asking again.
             if ((r.status >= 400 && r.status < 500 && r.status != 408 && r.status != 429) || r.status == 200 || f > 20) {
@@ -615,7 +615,7 @@ bool Market::fetch(Download & d) {
         d.state = DownloadState::done;
         d.note = "Saved to " + to;
     }
-    std::printf("ps5lm-app: download %s/%s: %s\n", d.repo.c_str(), d.file.c_str(), d.note.c_str());
+    std::printf("artemislm-ps5: download %s/%s: %s\n", d.repo.c_str(), d.file.c_str(), d.note.c_str());
     publish(true);
     return d.state == DownloadState::done;
 }

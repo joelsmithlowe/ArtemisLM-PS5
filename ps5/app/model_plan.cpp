@@ -330,7 +330,7 @@ const char * system_prompt_text(const std::string & id) {
         return "Answer in as few words as the question allows.";
     }
     if (id == "home") {
-        return "You are ArtemisLM, at home on a PlayStation 5. When a message already includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed, say so. Be direct.";
+        return "You are ArtemisLM PS5, at home on a PlayStation 5. When a message already includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed, say so. Be direct.";
     }
     return nullptr;
 }

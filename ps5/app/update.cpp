@@ -1,4 +1,4 @@
-// Check joelsmithlowe/ArtemisLM on GitHub and install a newer title zip.
+// Check joelsmithlowe/ArtemisLM-PS5 on GitHub and install a newer title zip.
 // The check runs at launch. Installing waits for Cross or the phone page.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -49,7 +49,7 @@ void set_status(const std::string & text) {
         std::lock_guard<std::mutex> lock(mu);
         status_text = shown;
     }
-    std::printf("ps5lm-app: update: %s\n", shown.c_str());
+    std::printf("artemislm-ps5: update: %s\n", shown.c_str());
 }
 
 void remember(const ReleaseInfo & info, bool newer) {
@@ -62,7 +62,7 @@ void remember(const ReleaseInfo & info, bool newer) {
 
 bool fetch_latest(ReleaseInfo * info, std::string * error) {
     if (tmpl < 0) {
-        tmpl = https_template("ArtemisLM-update");
+        tmpl = https_template("ArtemisLM-PS5-update");
     }
     if (tmpl < 0) {
         if (error) {
@@ -85,7 +85,7 @@ bool fetch_latest(ReleaseInfo * info, std::string * error) {
         },
         tmpl, 64u << 10);
     if (too_big || result.status != 200 || body.empty()) {
-        std::printf("ps5lm-app: update: github status %d (%s)\n", result.status, result.error.c_str());
+        std::printf("artemislm-ps5: update: github status %d (%s)\n", result.status, result.error.c_str());
         if (error) {
             *error = "Could not reach GitHub";
         }
@@ -112,7 +112,7 @@ void run_check() {
     }
     set_status(info.version + " is ready. Cross installs it");
     std::lock_guard<std::mutex> lock(mu);
-    notice = std::string("ArtemisLM ") + info.version + " is on GitHub. Settings, Sound and storage, App update.";
+    notice = std::string("ArtemisLM PS5 ") + info.version + " is on GitHub. Settings, Sound and storage, App update.";
 }
 
 bool take_cached(ReleaseInfo * info) {
@@ -128,12 +128,12 @@ void remove_work() {
     const std::string dir = kUpdateDir;
     std::error_code ec;
     std::filesystem::remove_all(dir + "/stage", ec);
-    unlink((dir + "/artemislm-app.zip").c_str());
-    unlink((dir + "/artemislm-app.zip.part").c_str());
+    unlink((dir + "/artemislm-ps5-app.zip").c_str());
+    unlink((dir + "/artemislm-ps5-app.zip.part").c_str());
 }
 
 bool download_zip(const ReleaseInfo & info, const std::string & zip, std::string * error) {
-    const std::string part = std::string(kUpdateDir) + "/artemislm-app.zip.part";
+    const std::string part = std::string(kUpdateDir) + "/artemislm-ps5-app.zip.part";
     unlink(part.c_str());
     FILE * out = std::fopen(part.c_str(), "wb");
     if (!out) {
@@ -147,7 +147,7 @@ bool download_zip(const ReleaseInfo & info, const std::string & zip, std::string
     bool too_big = false;
     bool write_failed = false;
     if (tmpl < 0) {
-        tmpl = https_template("ArtemisLM-update");
+        tmpl = https_template("ArtemisLM-PS5-update");
     }
     const FetchResult result = https_get(
         info.url, "",
@@ -171,7 +171,7 @@ bool download_zip(const ReleaseInfo & info, const std::string & zip, std::string
     const bool closed = std::fclose(out) == 0;
     if (tmpl < 0 || too_big || write_failed || !closed || result.status != 200 || got == 0) {
         unlink(part.c_str());
-        std::printf("ps5lm-app: update: download status %d bytes %llu (%s)\n", result.status,
+        std::printf("artemislm-ps5: update: download status %d bytes %llu (%s)\n", result.status,
                     (unsigned long long) got, result.error.c_str());
         if (error) {
             *error = too_big ? "The zip is too large" : "The download did not finish";
@@ -213,7 +213,7 @@ bool run_install() {
     }
     std::error_code ec;
     if (!std::filesystem::is_directory("/data/homebrew", ec)) {
-        set_status("Copy ArtemisLM to /data/homebrew once, then updates can install");
+        set_status("Copy ArtemisLM PS5 to /data/homebrew once, then updates can install");
         return false;
     }
     const double free = drive_free_gib("/data/ArtemisLM/models");
@@ -227,7 +227,7 @@ bool run_install() {
         return false;
     }
     set_status("Downloading " + info.version);
-    const std::string zip = std::string(kUpdateDir) + "/artemislm-app.zip";
+    const std::string zip = std::string(kUpdateDir) + "/artemislm-ps5-app.zip";
     const std::string stage = std::string(kUpdateDir) + "/stage";
     if (!download_zip(info, zip, &error)) {
         set_status(error.empty() ? "The download did not finish" : error);
@@ -237,7 +237,7 @@ bool run_install() {
     set_status("Checking the checksum");
     const std::string sum = sha256_file(zip);
     if (sum.empty() || sum != info.sha256) {
-        std::printf("ps5lm-app: update: checksum mismatch\n");
+        std::printf("artemislm-ps5: update: checksum mismatch\n");
         set_status("The checksum did not match");
         remove_work();
         return false;
@@ -300,7 +300,7 @@ void thread_main() {
             }
         }
     } catch (const std::exception & ex) {
-        std::printf("ps5lm-app: update: %s\n", ex.what());
+        std::printf("artemislm-ps5: update: %s\n", ex.what());
         set_status("The update stopped");
         installing.store(false);
     } catch (...) {

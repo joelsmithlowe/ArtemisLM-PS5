@@ -56,7 +56,7 @@ bool init(std::string * error) {
         std::snprintf(text, sizeof(text), "sceSslInit 0x%x", ssl);
     } else if ((http = sceHttp2Init(net, ssl, 512 * 1024, 4)) < 0) {  // more requests or pool: refused, 0x817b121c
         std::snprintf(text, sizeof(text), "sceHttp2Init 0x%x", http);
-    } else if ((g_template = sceHttp2CreateTemplate(http, "ArtemisLM/1.0", 3, 1)) < 0) {
+    } else if ((g_template = sceHttp2CreateTemplate(http, "ArtemisLM-PS5/1.0", 3, 1)) < 0) {
         std::snprintf(text, sizeof(text), "sceHttp2CreateTemplate 0x%x", g_template);
     } else {
         g_http = http;
@@ -104,7 +104,7 @@ int https_template(const char * agent) {
     if (!init(&error)) {
         return -1;
     }
-    return sceHttp2CreateTemplate(g_http, agent && *agent ? agent : "ArtemisLM/1.0", 3, 1);
+    return sceHttp2CreateTemplate(g_http, agent && *agent ? agent : "ArtemisLM-PS5/1.0", 3, 1);
 }
 
 FetchResult https_get(const std::string & url_in, const std::string & range,

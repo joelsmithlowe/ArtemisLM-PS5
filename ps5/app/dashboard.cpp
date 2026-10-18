@@ -624,8 +624,8 @@ constexpr int kDemos = 4;
 // empty category and flip a setting that is not on screen.
 void draw_credits(gfx::DrawList & l, const ui::Fonts & f, const Rect & a) {
     constexpr const char * lines[] = {
-        "ArtemisLM is a home build of PS5LM.",
-        "ArtemisLM on this console by Joel Smith-Lowe.",
+        "ArtemisLM PS5 is a home build of PS5LM.",
+        "ArtemisLM PS5 on this console by Joel Smith-Lowe.",
         "PS5LM by cobanov.",
         "The native GPU app grew from PS5LM Plus by abhi245y.",
         "llama.cpp and ggml by ggml-org.",
@@ -1272,7 +1272,8 @@ void Dashboard::draw_status(gfx::DrawList & l) const {
     const ui::Fonts & f = fonts_;
     const float y = 72;
     float w = put(l, f.semibold, "Artemis", kLeft, y, 28, kInk);
-    put(l, f.semibold, "LM", kLeft + w, y, 28, kBlue);
+    w += put(l, f.semibold, "LM", kLeft + w, y, 28, kBlue);
+    put(l, f.semibold, " PS5", kLeft + w, y, 28, kInk);
     // Right to left: how long it has been up, power, temperature.
     std::vector<std::string> items;
     if (live_.soc_temp > -100) {

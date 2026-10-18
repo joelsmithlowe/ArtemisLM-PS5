@@ -182,20 +182,20 @@ std::vector<std::string> tail_lines(const char * path) {
 }
 
 // Probe: download a URL over HTTPS to /data/ArtemisLM/fetch.out, logging the
-// status, size and speed (scripts/ps5lm-app.sh fetch <url>).
+// status, size and speed (scripts/artemislm-ps5.sh fetch <url>).
 void probe_fetch(std::string url) {
     FILE * out = std::fopen("/data/ArtemisLM/fetch.out", "wb");
     const FetchResult r = https_get(url, "", [&](const char * p, size_t n) { return out && std::fwrite(p, 1, n, out) == n; });
     if (out) {
         std::fclose(out);
     }
-    std::printf("ps5lm-app: fetch %s: status %d, length %lld, %llu bytes in %.1f s (%.2f MB/s)%s%s\n", url.c_str(),
+    std::printf("artemislm-ps5: fetch %s: status %d, length %lld, %llu bytes in %.1f s (%.2f MB/s)%s%s\n", url.c_str(),
                 r.status, (long long) r.length, (unsigned long long) r.bytes, r.seconds,
                 r.seconds > 0 ? r.bytes / 1e6 / r.seconds : 0.0, r.error.empty() ? "" : ", ", r.error.c_str());
 }
 
 // Probe: how fast the app can write, by method and place, fsync included
-// (scripts/ps5lm-app.sh bench-write). 128 MiB each.
+// (scripts/artemislm-ps5.sh bench-write). 128 MiB each.
 void probe_write() {
     const size_t total = 128u << 20;
     std::vector<char> buf(8u << 20, 'x');
@@ -240,12 +240,12 @@ void probe_write() {
                 }
             }
             const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            std::printf("ps5lm-app: write-bench %s %s: %s, %.1f MB/s\n", dir, m.name, ok ? "ok" : strerror(errno),
+            std::printf("artemislm-ps5: write-bench %s %s: %s, %.1f MB/s\n", dir, m.name, ok ? "ok" : strerror(errno),
                         ok ? total / 1e6 / s : 0.0);
             unlink(path.c_str());
         }
     }
-    std::printf("ps5lm-app: write-bench done\n");
+    std::printf("artemislm-ps5: write-bench done\n");
 }
 
 // Bytes under a folder, or 0.
@@ -271,7 +271,7 @@ void notify(const char * text) {
     sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
 }
 
-// A quit request from the PC (scripts/ps5lm-app.sh close): the app ends
+// A quit request from the PC (scripts/artemislm-ps5.sh close): the app ends
 // itself the way the system expects; killing a title that is rendering has
 // been followed by lost consoles (ps5-homebrew-ui's AGENTS.md).
 void quit_if_asked() {
@@ -279,7 +279,7 @@ void quit_if_asked() {
         return;
     }
     unlink(kQuit);
-    std::printf("ps5lm-app: quit requested\n");
+    std::printf("artemislm-ps5: quit requested\n");
     std::fflush(nullptr);
     sceSystemServiceLoadExec("exit", nullptr);
 }
@@ -346,7 +346,7 @@ void log_memory(const char * when) {
     sceKernelAvailableDirectMemorySize(0, pool, 2 * 1024 * 1024, &at, &avail);
     struct ps5_heap_stats heap = {};
     ps5_heap_stats(&heap);
-    std::printf("ps5lm-app: memory %s: pool free %.2f GiB, cpu heap %.2f GiB (peak %.2f)", when, avail / 1073741824.0,
+    std::printf("artemislm-ps5: memory %s: pool free %.2f GiB, cpu heap %.2f GiB (peak %.2f)", when, avail / 1073741824.0,
                 heap.mapped_bytes / 1073741824.0, heap.peak_bytes / 1073741824.0);
     for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
         size_t free = 0, total = 0;
@@ -404,11 +404,11 @@ void * run_server(void *) {
     try {
         rc = llama_server((int) argv.size() - 1, argv.data());
     } catch (const std::exception & e) {
-        std::printf("ps5lm-app: exception: %s\n", e.what());
+        std::printf("artemislm-ps5: exception: %s\n", e.what());
     } catch (...) {
-        std::printf("ps5lm-app: unknown exception\n");
+        std::printf("artemislm-ps5: unknown exception\n");
     }
-    std::printf("ps5lm-app: llama_server returned %d\n", rc);
+    std::printf("artemislm-ps5: llama_server returned %d\n", rc);
     std::fflush(nullptr);
     g_server_rc = rc == 0 ? 0 : 1;
     return nullptr;
@@ -477,7 +477,7 @@ struct Models {
         const char * kv = settings.kv_type == "auto" ? nullptr : settings.kv_type.c_str();
         if (settings.migrate == "on") {
             const std::string note = library_move(settings, "", running);
-            std::printf("ps5lm-app: %s\n", note.c_str());
+            std::printf("artemislm-ps5: %s\n", note.c_str());
         }
         for (const auto & path : find_models(library_dirs(settings))) {
             const ModelInfo m = read_model_info(path);
@@ -502,7 +502,7 @@ struct Models {
             row.decision = m.decision;
             row.current = path == running;
             rows.push_back(row);
-            std::printf("ps5lm-app: model %s (%s): %s\n", m.file_name.c_str(), m.arch.c_str(), p.why.c_str());
+            std::printf("artemislm-ps5: model %s (%s): %s\n", m.file_name.c_str(), m.arch.c_str(), p.why.c_str());
         }
         return rows;
     }
@@ -562,7 +562,7 @@ struct Models {
             args.insert(args.end(), { "--path", "/app0/assets/web" });
         }
         for (const auto & a : args) {
-            std::printf("ps5lm-app: arg %s\n", a.c_str());
+            std::printf("artemislm-ps5: arg %s\n", a.c_str());
         }
         g_server_args = args;
         g_server_rc = -1;
@@ -576,7 +576,7 @@ struct Models {
         pthread_attr_setstacksize(&attr, 16u << 20);  // the console's default stack is small
         pthread_create(&server, &attr, run_server, nullptr);
         server_started = true;
-        notify("ArtemisLM: loading the model onto the GPU");
+        notify("ArtemisLM PS5: loading the model onto the GPU");
     }
 
     void stop() {
@@ -593,7 +593,7 @@ struct Models {
         if (g_server_rc >= 0) {
             pthread_join(server, nullptr);
         } else {
-            std::printf("ps5lm-app: llama_server did not return in 10 s; restarting anyway\n");
+            std::printf("artemislm-ps5: llama_server did not return in 10 s; restarting anyway\n");
         }
         server_started = false;
         running.clear();
@@ -619,7 +619,7 @@ bool load_font(hui::gfx::Renderer & renderer, const char * name, hui::gfx::Font 
     std::string data;
     const std::string path = std::string(kAssets) + "/fonts/" + name;
     if (!hui::save::read_file(path, &data) || !font->load(data)) {
-        std::printf("ps5lm-app: font %s failed\n", name);
+        std::printf("artemislm-ps5: font %s failed\n", name);
         return false;
     }
     ref->font = font;
@@ -645,9 +645,9 @@ int main(int, char **) {
     if (std::freopen(kLog, "a", stderr) != nullptr) {
         setvbuf(stderr, nullptr, _IONBF, 0);
     }
-    std::printf("ps5lm-app: version " PS5LM_VERSION "\n");
+    std::printf("artemislm-ps5: version " PS5LM_VERSION "\n");
     if (models_rc != 0 && models_err != EEXIST) {
-        std::printf("ps5lm-app: /data/ArtemisLM/models: %s\n", std::strerror(models_err));
+        std::printf("artemislm-ps5: /data/ArtemisLM/models: %s\n", std::strerror(models_err));
     }
     // One device-local heap over the whole pool (RADV splits an APU's 2/3 to
     // 1/3), and a HOME for llama.cpp, which throws without one.
@@ -666,14 +666,14 @@ int main(int, char **) {
         if (known) {
             setenv(name.c_str(), line.c_str() + eq + 1, 1);
         }
-        std::printf("ps5lm-app: env %s%s\n", line.c_str(), known ? "" : " (ignored)");
+        std::printf("artemislm-ps5: env %s%s\n", line.c_str(), known ? "" : " (ignored)");
     }
-    std::printf("ps5lm-app: start\n");
+    std::printf("artemislm-ps5: start\n");
 
     // The screen first: it takes from the same memory as the model.
     Display display;
     if (!display.open(1920, 1080)) {
-        std::printf("ps5lm-app: no display\n");
+        std::printf("artemislm-ps5: no display\n");
     }
     hui::gfx::Renderer renderer;
     hui::gfx::Font regular, semibold, headline, mono;
@@ -684,7 +684,7 @@ int main(int, char **) {
                        load_font(renderer, "dejavu-sans-mono.huifont", &mono, &fonts.mono);
     fonts.pixel = fonts.mono;
     fonts.hand = fonts.regular;
-    std::printf("ps5lm-app: dashboard %s\n", ui_ok ? "ready" : "failed");
+    std::printf("artemislm-ps5: dashboard %s\n", ui_ok ? "ready" : "failed");
 
     Dashboard dash(fonts);
     DashboardFrame frame;
@@ -743,7 +743,7 @@ int main(int, char **) {
             ggml_backend_dev_t dev = ggml_backend_dev_get(i);
             size_t free = 0, total = 0;
             ggml_backend_dev_memory(dev, &free, &total);
-            std::printf("ps5lm-app: device %zu %s (%s): %.2f / %.2f GiB free\n", i, ggml_backend_dev_name(dev),
+            std::printf("artemislm-ps5: device %zu %s (%s): %.2f / %.2f GiB free\n", i, ggml_backend_dev_name(dev),
                         ggml_backend_dev_description(dev), free / 1073741824.0, total / 1073741824.0);
             // The PS5 is an APU: ggml calls its GPU integrated.
             const auto type = ggml_backend_dev_type(dev);
@@ -770,7 +770,7 @@ int main(int, char **) {
             model_part.model_gib = info.file_bytes / 1073741824.0;
             model_part.model_file = path;
             model_part.args = args;
-            std::printf("ps5lm-app: app-args.txt overrides the planner\n");
+            std::printf("artemislm-ps5: app-args.txt overrides the planner\n");
         } else {
             auto chosen = read_lines(kChoice);
             unlink(kChoice);
@@ -792,7 +792,7 @@ int main(int, char **) {
             unlink(kTextOnly);
             const auto mm = std::find(args.begin(), args.end(), "--mmproj");
             if (mm != args.end()) {
-                std::printf("ps5lm-app: loading without %s\n", mm + 1 != args.end() ? (mm + 1)->c_str() : "the projector");
+                std::printf("artemislm-ps5: loading without %s\n", mm + 1 != args.end() ? (mm + 1)->c_str() : "the projector");
                 args.erase(mm, std::min(mm + 2, args.end()));
                 model_part.args = args;
             }
@@ -848,7 +848,7 @@ int main(int, char **) {
     panel_start(&market, models.budget_gib);
     if (idle_page) {
         page_start();
-        notify("ArtemisLM: nothing is loaded. The page can download a model or add a folder.");
+        notify("ArtemisLM PS5: nothing is loaded. The page can download a model or add a folder.");
     }
     update_start(false);
     int panel_seen = panel_generation();
@@ -889,17 +889,17 @@ int main(int, char **) {
             if (live.state == ServerState::loading && projector && restart_at == 0) {
                 std::ofstream(kChoice) << models.running << "\n";
                 std::ofstream(kTextOnly) << models.running << "\n";
-                notify("ArtemisLM: the image projector did not load; loading the model text only");
+                notify("ArtemisLM PS5: the image projector did not load; loading the model text only");
                 dash.set_busy("Loading " + base_name(models.running) + " text only",
                               "Its image projector did not load, see /data/ArtemisLM/llama.log");
                 restart_at = n + 3;
             } else {
-                notify("ArtemisLM: the server stopped, see /data/ArtemisLM/llama.log");
+                notify("ArtemisLM PS5: the server stopped, see /data/ArtemisLM/llama.log");
             }
         }
         const bool serving = live.state == ServerState::ready || live.state == ServerState::generating;
         if (serving && !was_serving) {
-            notify(live.decision.empty() ? "ArtemisLM: ready, chat in a browser on this network" : "ArtemisLM: ready for decisions at /v1/systemone");
+            notify(live.decision.empty() ? "ArtemisLM PS5: ready, chat in a browser on this network" : "ArtemisLM PS5: ready for decisions at /v1/systemone");
         }
         was_serving = serving;
         if (n % 30 == 0) {
@@ -907,7 +907,7 @@ int main(int, char **) {
         }
         dash.set_live(live);
         feedback.clear();
-        // A button pressed from the PC (scripts/ps5lm-app.sh press r1), for
+        // A button pressed from the PC (scripts/artemislm-ps5.sh press r1), for
         // testing the screens without a controller in hand.
         hui::InputFrame in = input;
         if (n % 20 == 10) {
@@ -958,9 +958,9 @@ int main(int, char **) {
             const bool over = gib > models.settings.scratch_limit_gib;
             if (over && !scratch_warned) {
                 char text[128];
-                std::snprintf(text, sizeof(text), "ArtemisLM: the chat's scratch folder holds %.1f GiB; clear it in Settings", gib);
+                std::snprintf(text, sizeof(text), "ArtemisLM PS5: the chat's scratch folder holds %.1f GiB; clear it in Settings", gib);
                 notify(text);
-                std::printf("ps5lm-app: %s\n", text + 7);
+                std::printf("artemislm-ps5: %s\n", text + 15);
             }
             scratch_warned = over;
         }
@@ -970,7 +970,7 @@ int main(int, char **) {
             if (mv.saved != saved_seen) {
                 saved_seen = mv.saved;
                 models.rescan(stats, false);
-                notify(("ArtemisLM: " + mv.note).c_str());
+                notify(("ArtemisLM PS5: " + mv.note).c_str());
             }
             dash.set_market(std::move(mv));
         }
@@ -994,7 +994,7 @@ int main(int, char **) {
         std::string update_note;
         if (update_take_notice(&update_note)) {
             notify(update_note.c_str());
-            std::printf("ps5lm-app: %s\n", update_note.c_str());
+            std::printf("artemislm-ps5: %s\n", update_note.c_str());
         }
         if (update_take_restart() && restart_at == 0) {
             dash.set_busy("Updating", update_status());
@@ -1015,8 +1015,8 @@ int main(int, char **) {
             }
             file_job = 0;
             dash.set_busy("");
-            notify(("ArtemisLM: " + note).c_str());
-            std::printf("ps5lm-app: %s\n", note.c_str());
+            notify(("ArtemisLM PS5: " + note).c_str());
+            std::printf("artemislm-ps5: %s\n", note.c_str());
             models.rescan(stats, false);
         }
         if (panel_generation() != panel_seen) {
@@ -1051,7 +1051,7 @@ int main(int, char **) {
                 was.extra_dir != models.settings.extra_dir || was.migrate != models.settings.migrate) {
                 models.rescan(stats);
             }
-            std::printf("ps5lm-app: settings saved\n");
+            std::printf("artemislm-ps5: settings saved\n");
         }
         switch (req.kind) {
             case Dashboard::Request::ask:
@@ -1110,7 +1110,7 @@ int main(int, char **) {
                 if (market.job(req.repo, req.file, req.path.empty() ? models.settings.download_dir : req.path, &job) &&
                     market.enqueue(job, free_gib(job.dir))) {
                     std::ofstream(kChoice) << "none\n";
-                    std::printf("ps5lm-app: restarting to download %s/%s without a model\n", job.repo.c_str(), job.file.c_str());
+                    std::printf("artemislm-ps5: restarting to download %s/%s without a model\n", job.repo.c_str(), job.file.c_str());
                     dash.set_busy("Unloading " + base_name(models.running), "The app restarts without it, then the download starts");
                     restart_at = n + 3;
                 }
@@ -1124,10 +1124,10 @@ int main(int, char **) {
                 std::filesystem::remove_all(e.path(), ec);
             }
             stats.set_scratch(folder_bytes(kScratch) / 1073741824.0);
-            notify("ArtemisLM: scratch folder cleared");
-            std::printf("ps5lm-app: scratch folder cleared\n");
+            notify("ArtemisLM PS5: scratch folder cleared");
+            std::printf("artemislm-ps5: scratch folder cleared\n");
         }
-        // The same requests from the PC (scripts/ps5lm-app.sh load|unload).
+        // The same requests from the PC (scripts/artemislm-ps5.sh load|unload).
         if (n % 60 == 30 && req.kind == Dashboard::Request::none) {
             if (std::string p = take_request_file("/data/ArtemisLM/load"); !p.empty()) {
                 req = { Dashboard::Request::load, p };
@@ -1151,7 +1151,7 @@ int main(int, char **) {
             if (req.kind == Dashboard::Request::load) {
                 unlink(kArgs);  // the library's choice replaces a manual override
             }
-            std::printf("ps5lm-app: restarting for %s\n", req.kind == Dashboard::Request::load ? req.path.c_str() : "no model");
+            std::printf("artemislm-ps5: restarting for %s\n", req.kind == Dashboard::Request::load ? req.path.c_str() : "no model");
             const bool loaded = !models.running.empty();
             if (req.kind == Dashboard::Request::load) {
                 dash.set_busy(loaded ? "Switching models" : "Loading " + base_name(req.path),
@@ -1167,7 +1167,7 @@ int main(int, char **) {
             render();
             if (n % 60 == 45 && !take_request_file("/data/ArtemisLM/screenshot").empty()) {
                 const bool ok = save_screen("/data/ArtemisLM/screen.bmp", display.width(), display.height());
-                std::printf("ps5lm-app: screenshot %s\n", ok ? "saved" : "failed");
+                std::printf("artemislm-ps5: screenshot %s\n", ok ? "saved" : "failed");
             }
         }
         display.swap();

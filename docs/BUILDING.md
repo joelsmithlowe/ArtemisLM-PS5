@@ -59,15 +59,15 @@ may fail to link at PS5_Vulkan's HEAD, which does not matter here.
 
 ```sh
 scripts/preview-app-ui.sh                          # every screen to build/app-preview/*.png (Mesa, no console)
-PS5_HOST=<console IP> scripts/ps5lm-app.sh cycle   # close, deploy, launch; also close|deploy|launch
-PS5_HOST=<console IP> scripts/ps5lm-app.sh load /data/PS5LM/models/<file>.gguf
-PS5_HOST=<console IP> scripts/ps5lm-app.sh screenshot out.bmp
+PS5_HOST=<console IP> scripts/artemislm-ps5.sh cycle   # close, deploy, launch; also close|deploy|launch
+PS5_HOST=<console IP> scripts/artemislm-ps5.sh load /data/ArtemisLM/models/<file>.gguf
+PS5_HOST=<console IP> scripts/artemislm-ps5.sh screenshot out.bmp
 ```
 
-- The app closes itself on request (`/data/PS5LM/quit`), so nothing is killed while it draws.
+- The app closes itself on request (`/data/ArtemisLM/quit`), so nothing is killed while it draws.
   Launching uses ps5-homebrew-dev-protocol's launch payload, cloned into `.deps/src`. A title started
   any other way without a user (shsrv's `launch`) is ended by the system after about 20 seconds.
-- `/data/PS5LM/app-args.txt` (one argument a line) overrides the planner. `/data/PS5LM/env.txt` (one
+- `/data/ArtemisLM/app-args.txt` (one argument a line) overrides the planner. `/data/ArtemisLM/env.txt` (one
   `NAME=value` a line) sets `RADV_`, `MESA_`, `ACO_`, `GGML_` and `LLAMA_` switches before the GPU opens.
 - The artwork comes from SVG: `scripts/render-artwork.sh` renders the icon and the home screen
   background with the site's Recursive fonts. `scripts/bake-fonts.sh` bakes Manrope for the dashboard.

@@ -1,4 +1,4 @@
-// Check joelsmithlowe/ArtemisLM releases and install a newer title zip into
+// Check joelsmithlowe/ArtemisLM-PS5 releases and install a newer title zip into
 // /data/homebrew/PPSA98010. One check runs at launch. Cross on the update
 // row, or the phone page, downloads it, checks the checksum, and restarts.
 //

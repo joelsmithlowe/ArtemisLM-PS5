@@ -37,7 +37,7 @@ does not send more than the server holds.
   "provider": {
     "ps5lm": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "PS5LM",
+      "name": "ArtemisLM PS5",
       "options": { "baseURL": "http://192.168.1.19:47281/v1" },
       "models": { "ps5": { "name": "Model on the PS5", "limit": { "context": 65536, "output": 8192 } } }
     }
@@ -45,7 +45,7 @@ does not send more than the server holds.
 }
 ```
 
-Then `opencode`, and pick **PS5LM / Model on the PS5** with `/models`. The
+Then `opencode`, and pick **ArtemisLM PS5 / Model on the PS5** with `/models`. The
 first run installs the `@ai-sdk/openai-compatible` package, which takes a few
 minutes before anything reaches the console.
 
@@ -55,7 +55,7 @@ minutes before anything reaches the console.
 
 ```toml
 [model_providers.ps5lm]
-name = "PS5LM"
+name = "ArtemisLM PS5"
 base_url = "http://192.168.1.19:47281/v1"
 wire_api = "responses"
 

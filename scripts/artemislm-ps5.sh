@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Drives the ArtemisLM app on the console from the PC, with no controller:
 #
-#   scripts/ps5lm-app.sh close     ask the running app to end itself, and wait
-#   scripts/ps5lm-app.sh deploy    upload build/app-ps5/title/<TITLE_ID>
-#   scripts/ps5lm-app.sh launch    start it (ps5-homebrew-dev-protocol's launch payload)
-#   scripts/ps5lm-app.sh cycle     close, deploy, launch
-#   scripts/ps5lm-app.sh screenshot [file]   what the TV shows, as a BMP
-#   scripts/ps5lm-app.sh load <model path>   switch the model, as the library does
-#   scripts/ps5lm-app.sh unload              unload the model
-#   scripts/ps5lm-app.sh press <button>      press a button (up, down, cross, l1, r1, ...)
-#   scripts/ps5lm-app.sh fetch <url>         probe: download over HTTPS (system TLS), see app.log
-#   scripts/ps5lm-app.sh bench-write         probe: write speed by method, see app.log
-#   scripts/ps5lm-app.sh search <words>      search Get models from the PC
+#   scripts/artemislm-ps5.sh close     ask the running app to end itself, and wait
+#   scripts/artemislm-ps5.sh deploy    upload build/app-ps5/title/<TITLE_ID>
+#   scripts/artemislm-ps5.sh launch    start it (ps5-homebrew-dev-protocol's launch payload)
+#   scripts/artemislm-ps5.sh cycle     close, deploy, launch
+#   scripts/artemislm-ps5.sh screenshot [file]   what the TV shows, as a BMP
+#   scripts/artemislm-ps5.sh load <model path>   switch the model, as the library does
+#   scripts/artemislm-ps5.sh unload              unload the model
+#   scripts/artemislm-ps5.sh press <button>      press a button (up, down, cross, l1, r1, ...)
+#   scripts/artemislm-ps5.sh fetch <url>         probe: download over HTTPS (system TLS), see app.log
+#   scripts/artemislm-ps5.sh bench-write         probe: write speed by method, see app.log
+#   scripts/artemislm-ps5.sh search <words>      search Get models from the PC
 #
 # The app is never killed: it polls /data/ArtemisLM/quit and leaves through
 # sceSystemServiceLoadExec("exit"), since killing a title that is rendering

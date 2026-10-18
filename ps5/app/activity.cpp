@@ -190,7 +190,7 @@ void ask_self(int port, const std::string & text, bool decision, bool clock_on, 
             json messages = json::array();
             const LiveFacts facts = live_facts(text, clock_on, web_on);
             if (facts.used_clock || facts.used_search || facts.used_calc) {
-                std::string note = "You are ArtemisLM on a PlayStation 5. Answer from the notes below. "
+                std::string note = "You are ArtemisLM PS5. Answer from the notes below. "
                                    "Do not invent a rate, a price or a date. If the search failed, say so.";
                 if (facts.used_clock) {
                     note += "\nConsole clock (get_datetime): " + facts.clock;

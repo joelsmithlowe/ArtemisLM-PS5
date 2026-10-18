@@ -1,7 +1,7 @@
 # Changelog
 
-ArtemisLM 0.9.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-app-v0.9.0.zip`.
+ArtemisLM PS5 0.9.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.9.0.zip`.
 `contentVersion` stays `01.009.000`, so the console does not offer a system
 update. A newer release installs from Settings, or by copying the `PPSA98010`
 folder over the installed one.
@@ -13,6 +13,9 @@ this tree. PS5LM's own release history is not repeated here.
 
 ### Added
 
+- The console title, the phone page and the release name are ArtemisLM PS5.
+  Updates come from `joelsmithlowe/ArtemisLM-PS5`. The home folder stays
+  `/data/ArtemisLM`.
 - Its own install, title PPSA98010, content id
   `UP9000-PPSA98010_00-ARTEMISLM0000001`. PS5LM and PS5LM Plus can stay
   installed. They keep using `/data/PS5LM/models`.

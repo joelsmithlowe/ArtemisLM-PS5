@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="ps5/app/sce_sys/icon0.png" width="128" alt="ArtemisLM">
+  <img src="ps5/app/sce_sys/icon0.png" width="128" alt="ArtemisLM PS5">
 </p>
 
-<h1 align="center">ArtemisLM</h1>
+<h1 align="center">ArtemisLM PS5</h1>
 
 <p align="center">
   <b>A language model that lives on the console, by Joel Smith-Lowe.</b><br>
@@ -10,12 +10,12 @@
 </p>
 
 <p align="center">
-  <b><a href="https://github.com/joelsmithlowe/ArtemisLM">Source</a></b> ·
+  <b><a href="https://github.com/joelsmithlowe/ArtemisLM-PS5">Source</a></b> ·
   <a href="#try-it">Get started</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-ArtemisLM is its own title, PPSA98010, with its own folder, `/data/ArtemisLM`. Models live in
+ArtemisLM PS5 is its own title, PPSA98010, with its own folder, `/data/ArtemisLM`. Models live in
 `/data/ArtemisLM/models`. The app also reads `/data/PS5LM/models`, the folder PS5LM and PS5LM Plus
 already share, and the same kind of folder on an M.2 or USB drive. A copy found elsewhere can stay
 where it is, or be moved home and the old file removed.
@@ -24,15 +24,15 @@ The chat reads the console clock, searches the web, and works out a plain sum be
 model. Settings on the television and on the phone page cover context, flash attention, the prompt
 batch, and how much spare memory to keep. Measured is the spare this console was tested with.
 
-The pictures on this page are drawn for ArtemisLM. They are the mark, and the phone page.
+The pictures on this page are drawn for ArtemisLM PS5. They are the mark, and the phone page.
 
 <p align="center">
-  <img src="docs/media/artemislm-mark.gif" width="720" alt="ArtemisLM: a paper plane follows a trail of code toward a few stars">
+  <img src="docs/media/artemislm-ps5-mark.gif" width="720" alt="ArtemisLM PS5: a paper plane follows a trail of code toward a few stars">
 </p>
 
 <p align="center">
-  <img src="docs/media/artemislm-chat.gif" width="49%" alt="The phone chat works out 17 times 23 and shows 391">
-  <img src="docs/media/artemislm-library.gif" width="49%" alt="The library lists a model at home and one still in the PS5LM folder, then moves it">
+  <img src="docs/media/artemislm-ps5-chat.gif" width="49%" alt="The phone chat works out 17 times 23 and shows 391">
+  <img src="docs/media/artemislm-ps5-library.gif" width="49%" alt="The library lists a model at home and one still in the PS5LM folder, then moves it">
   <br><sub>Chat works out a sum before the model answers. Library can move a model from the PS5LM folder into /data/ArtemisLM/models.</sub>
 </p>
 
@@ -98,10 +98,10 @@ You need a PS5 on firmware 7.00 to 13.60, jailbroken, with these payloads loaded
 | [elfldr](https://github.com/ps5-payload-dev/elfldr) (port 9021) | temperature, power and real free space, through ps5-exporter | recommended |
 | [ftpsrv](https://github.com/ps5-payload-dev/ftpsrv) (port 2121) | installing the app, copying models from a PC | recommended |
 
-1. Download `artemislm-app-vX.Y.Z.zip` from the [releases](https://github.com/joelsmithlowe/ArtemisLM/releases) and unzip it.
-2. Copy the `PPSA98010` folder to `/data/homebrew` over FTP. ShadowMountPlus adds **ArtemisLM** to the
+1. Download `artemislm-ps5-app-vX.Y.Z.zip` from the [releases](https://github.com/joelsmithlowe/ArtemisLM-PS5/releases) and unzip it.
+2. Copy the `PPSA98010` folder to `/data/homebrew` over FTP. ShadowMountPlus adds **ArtemisLM PS5** to the
    home screen. PS5LM can stay installed beside it.
-3. Open ArtemisLM. The first launch creates `/data/ArtemisLM/models`. With nothing loaded, open
+3. Open ArtemisLM PS5. The first launch creates `/data/ArtemisLM/models`. With nothing loaded, open
    `http://<console>:47281`. Library can download a model, and Settings can add a folder that already
    has one. A model can also come from **Models > Suggested**, or from a `.gguf` copied into that
    folder, or into `ArtemisLM/models` on a USB drive. A model already in
@@ -156,5 +156,5 @@ ggml-vulkan on [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan)'s RADV, bui
 GPL-3.0-or-later, see [LICENSE](LICENSE). llama.cpp keeps its MIT licence, Manrope its OFL. No Sony
 SDK files, keys, firmware or model weights are in this repository.
 
-ArtemisLM is not affiliated with Sony Interactive Entertainment. "PlayStation" and "PS5" are trademarks
+ArtemisLM PS5 is not affiliated with Sony Interactive Entertainment. "PlayStation" and "PS5" are trademarks
 of Sony Interactive Entertainment. This build stands on PS5LM by cobanov; the credits on the console name that work.
