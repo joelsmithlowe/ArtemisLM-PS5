@@ -34,7 +34,28 @@ namespace {
 std::mutex g_init;
 int        g_template = -1;
 int        g_http = -1;
+int        g_net = 0;  // 1 after sceNetInit has succeeded
 std::string g_init_error;
+
+// Caller holds g_init. A failed attempt is not remembered: the LAN can come up later.
+bool net_up_locked(char * text, size_t text_n) {
+    if (g_net == 1) {
+        return true;
+    }
+    if (int rc = sceNetInit(); rc < 0) {
+        if (text && text_n) {
+            std::snprintf(text, text_n, "sceNetInit 0x%x", rc);
+        }
+        static int logged = 0;
+        if (!logged) {
+            logged = 1;
+            std::printf("artemislm-ps5: sceNetInit 0x%x\n", rc);
+        }
+        return false;
+    }
+    g_net = 1;
+    return true;
+}
 
 // The libraries once per process; their contexts live as long as it does.
 bool init(std::string * error) {
@@ -46,10 +67,13 @@ bool init(std::string * error) {
         *error = g_init_error;
         return false;
     }
-    char text[96];
+    char text[96] = {};
     int net = -1, ssl = -1, http = -1;
-    if (int rc = sceNetInit(); rc < 0) {
-        std::snprintf(text, sizeof(text), "sceNetInit 0x%x", rc);
+    const bool stack = net_up_locked(text, sizeof(text));
+    if (!stack) {
+        if (!text[0]) {
+            std::snprintf(text, sizeof(text), "sceNetInit failed");
+        }
     } else if ((net = sceNetPoolCreate("ps5lm-fetch", 128 * 1024, 0)) < 0) {
         std::snprintf(text, sizeof(text), "sceNetPoolCreate 0x%x", net);
     } else if ((ssl = sceSslInit(512 * 1024)) < 0) {
@@ -98,6 +122,11 @@ std::string location(int req) {
 }
 
 }  // namespace
+
+bool net_up() {
+    std::lock_guard<std::mutex> lock(g_init);
+    return net_up_locked(nullptr, 0);
+}
 
 int https_template(const char * agent) {
     std::string error;

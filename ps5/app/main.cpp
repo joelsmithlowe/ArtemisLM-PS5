@@ -414,6 +414,16 @@ void * run_server(void *) {
         std::printf("artemislm-ps5: unknown exception\n");
     }
     std::printf("artemislm-ps5: llama_server returned %d\n", rc);
+    if (rc != 0) {
+        const std::vector<std::string> lines = tail_lines(kLlamaLog);
+        const size_t begin = lines.size() > 12 ? lines.size() - 12 : 0;
+        for (size_t i = begin; i < lines.size(); ++i) {
+            std::printf("artemislm-ps5: llama.log: %s\n", lines[i].c_str());
+        }
+        if (lines.empty()) {
+            std::printf("artemislm-ps5: llama.log is empty\n");
+        }
+    }
     std::fflush(nullptr);
     g_server_rc = rc == 0 ? 0 : 1;
     return nullptr;
@@ -576,6 +586,10 @@ struct Models {
         stats.set_model(model_part);
         stats.set_state(ServerState::loading);
         publish(stats);
+        // Sockets opened before the console network stack is up do not accept
+        // a connection from the LAN. llama-server also refuses the port once
+        // and would exit, so the stack is brought up before that thread starts.
+        net_up();
         pthread_attr_t attr;
         pthread_attr_init(&attr);
         pthread_attr_setstacksize(&attr, 16u << 20);  // the console's default stack is small
@@ -864,7 +878,7 @@ int main(int, char **) {
     panel_set_budget(models.budget_gib);
     panel_start(&market, models.budget_gib);
     if (idle_page) {
-        page_start();
+        page_start([&stats](const std::string & note) { stats.set_phase(note); });
         notify("ArtemisLM PS5: nothing is loaded. The page can download a model or add a folder.");
     }
     update_start(false);
@@ -1045,6 +1059,10 @@ int main(int, char **) {
         // A restart asked for a few frames ago, once the busy screen is up.
         if (restart_at != 0 && n >= restart_at) {
             std::fflush(nullptr);
+            // Drop both listeners first. The new process starts while this one
+            // is still exiting, and a single refused bind used to stop the load.
+            page_stop();
+            panel_stop();
             models.stop();
             sceSystemServiceLoadExec("/app0/eboot.bin", nullptr);
         }

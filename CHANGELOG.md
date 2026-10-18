@@ -1,12 +1,24 @@
 # Changelog
 
-ArtemisLM PS5 0.12.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.0.zip`.
-`contentVersion` is `01.012.000`. A newer release installs from Settings, or by
+ArtemisLM PS5 0.12.1, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.1.zip`.
+`contentVersion` is `01.012.001`. A newer release installs from Settings, or by
 copying the `PPSA98010` folder over the installed one.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.1] - 2026-10-19
+
+### Fixed
+
+- Loading a model restarts the app. The new process was opening its ports while
+  the previous one still held them, so the load notice appeared and then the
+  server stopped. The restart now closes ports 47281 and 47282 first, and the
+  new process waits until they are free.
+- With no model loaded, the page on port 47281 is the address a browser on the
+  same network can open. The television shows that address. Opening `/v1` in a
+  browser goes to the page.
 
 ## [0.12.0] - 2026-10-18
 

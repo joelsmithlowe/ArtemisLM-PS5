@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "stats.hpp"
 
+#include "fetch.hpp"
+#include "page_http.hpp"
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/resource.h>
@@ -210,7 +213,30 @@ bool send_payload(const char * path, int port) {
     return ok;
 }
 
+#ifdef __PROSPERO__
+extern "C" int sceNetCtlInit(void);
+extern "C" int sceNetCtlGetInfo(int code, void * info);
+#endif
+
 std::string local_address() {
+#ifdef __PROSPERO__
+    // The routing trick below is empty when this console has no route to the
+    // internet. The LAN address is still the one a phone on the same network uses.
+    net_up();
+    static int ctl = 0;
+    if (ctl != 1 && sceNetCtlInit() == 0) {
+        ctl = 1;
+    }
+    if (ctl == 1) {
+        char info[256] = {};
+        if (sceNetCtlGetInfo(14, info) == 0) {  // SCE_NET_CTL_INFO_IP_ADDRESS
+            info[15] = 0;
+            if (lan_ipv4(info)) {
+                return info;
+            }
+        }
+    }
+#endif
     const int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
         return {};
@@ -232,7 +258,7 @@ std::string local_address() {
         }
     }
     close(fd);
-    return ip == "0.0.0.0" ? std::string() : ip;
+    return lan_ipv4(ip) ? ip : std::string();
 }
 
 void StatsCollector::start(int port) {
@@ -441,7 +467,21 @@ void StatsCollector::run() {
         }
         std::vector<Drive> drives = drives_from_metrics(p);
 
+        // The first reading can be empty: the LAN is not up when the app starts.
+        // Keep the last real address, and replace a placeholder once one appears.
+        static int addr_tick = 0;
+        std::string fresh_ip;
+        if (addr_tick == 0 || addr_tick >= 5) {
+            fresh_ip = local_address();
+            addr_tick = 1;
+        } else {
+            ++addr_tick;
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
+        if (!fresh_ip.empty()) {
+            live_.address = fresh_ip + ":" + std::to_string(port_);
+        }
         const double dt = wall - last_wall;
         live_.soc_temp = soc_t;
         live_.cpu_temp = cpu_t;

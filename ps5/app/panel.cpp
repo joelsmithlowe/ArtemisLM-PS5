@@ -13,6 +13,7 @@
 #include "reference.hpp"
 #include "model_plan.hpp"
 #include "search_parse.hpp"
+#include "page_http.hpp"
 #include "settings.hpp"
 #include "stats.hpp"
 #include "update.hpp"
@@ -20,10 +21,14 @@
 #include <nlohmann/json.hpp>
 
 #include <arpa/inet.h>
+#include <cerrno>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <cstdio>
@@ -31,6 +36,7 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <mutex>
 #include <string>
@@ -50,6 +56,8 @@ Market * g_market = nullptr;
 double g_budget = 0;
 std::string g_running;
 std::atomic<int> g_gen{ 0 };
+std::atomic<bool> g_panel_stop{ false };
+std::atomic<int> g_panel_fd{ -1 };
 
 void bump() { g_gen.fetch_add(1); }
 
@@ -116,7 +124,9 @@ std::string query_value(const std::string & path, const char * key) {
 void send_all(int fd, const std::string & bytes) {
     size_t sent = 0;
     while (sent < bytes.size()) {
-        const ssize_t n = send(fd, bytes.data() + sent, bytes.size() - sent, 0);
+        // One send of the whole phone page has failed to leave this console.
+        const size_t chunk = std::min(bytes.size() - sent, (size_t) 16384);
+        const ssize_t n = send(fd, bytes.data() + sent, chunk, 0);
         if (n <= 0) {
             return;
         }
@@ -945,33 +955,78 @@ void connection(int fd) {
     close(fd);
 }
 
+bool accept_gone(int err) {
+    return err == EINTR || err == EAGAIN || err == EWOULDBLOCK || err == ECONNABORTED || err == EPROTO || err == EBADF;
+}
+
+// Bind, or keep trying. A model load restarts the app with LoadExec while the
+// previous process can still hold this port. Giving up on the first try left
+// the page with no library for the rest of the run.
 void serve() {
-    const int srv = socket(AF_INET, SOCK_STREAM, 0);
-    if (srv < 0) {
-        std::printf("artemislm-ps5: library port failed to open\n");
-        return;
-    }
-    int on = 1;
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    sockaddr_in addr = {};
-#ifdef __FreeBSD__
-    addr.sin_len = sizeof(addr);
-#endif
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons((uint16_t) kPanelPort);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 4) != 0) {
-        std::printf("artemislm-ps5: library port %d is in use\n", kPanelPort);
-        close(srv);
-        return;
-    }
-    std::printf("artemislm-ps5: library on port %d\n", kPanelPort);
-    for (;;) {
-        const int fd = accept(srv, nullptr, nullptr);
-        if (fd < 0) {
+    int logged = 0;
+    while (!g_panel_stop.load()) {
+        net_up();
+        const int srv = socket(AF_INET, SOCK_STREAM, 0);
+        if (srv < 0) {
+            if (logged < 3) {
+                std::printf("artemislm-ps5: library port failed to open, errno %d\n", errno);
+                logged++;
+            }
+            sleep(1);
             continue;
         }
-        std::thread(connection, fd).detach();
+        int on = 1;
+        setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+        sockaddr_in addr = {};
+#ifdef __FreeBSD__
+        addr.sin_len = sizeof(addr);
+#endif
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons((uint16_t) kPanelPort);
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 16) != 0) {
+            const int err = errno;
+            if (logged < 3 || logged % 10 == 0) {
+                std::printf("artemislm-ps5: library port %d is not open, errno %d\n", kPanelPort, err);
+            }
+            logged++;
+            close(srv);
+            sleep(1);
+            continue;
+        }
+        logged = 0;
+        std::printf("artemislm-ps5: library on port %d\n", kPanelPort);
+        g_panel_fd.store(srv);
+        if (g_panel_stop.load()) {
+            const int held = g_panel_fd.exchange(-1);
+            if (held >= 0) {
+                close(held);
+            }
+            return;
+        }
+        for (;;) {
+            const int fd = accept(srv, nullptr, nullptr);
+            if (fd < 0) {
+                const int err = errno;
+                if (g_panel_stop.load()) {
+                    break;
+                }
+                if (accept_gone(err)) {
+                    continue;
+                }
+                std::printf("artemislm-ps5: library accept stopped, errno %d\n", err);
+                break;
+            }
+            std::thread(connection, fd).detach();
+        }
+        const int held = g_panel_fd.exchange(-1);
+        if (held >= 0) {
+            close(held);
+        }
+        if (g_panel_stop.load()) {
+            return;
+        }
+        sleep(1);
     }
 }
 
@@ -979,15 +1034,19 @@ void serve() {
 
 // The page on the chat port when nothing is loaded. llama-server is not started: with
 // no model it would be router mode and could try to spawn a child, which this
-// title cannot do. Only the chat page is served. Anything else, including
-// /v1, answers that no model is loaded. A later load restarts the app, and
-// llama-server then owns this port.
+// title cannot do. GET / is the phone page. GET /v1 is only the API prefix, so a
+// browser that opens it is sent to /. Anything else answers that no model is
+// loaded. A later load restarts the app, and llama-server then owns this port.
 namespace {
 
 constexpr int kPagePort = kChatPort;
 constexpr const char * kPageFile = "/app0/assets/web/index.html";
 constexpr const char * kIdleJson =
     "{\"error\":\"No model loaded. Open Library to download one, or Settings to add a folder.\"}";
+
+std::atomic<int> g_page_gen{ 0 };
+std::atomic<bool> g_page_stop{ false };
+std::atomic<int> g_page_fd{ -1 };
 
 std::string load_page_file() {
     std::ifstream in(kPageFile, std::ios::binary);
@@ -1001,20 +1060,22 @@ std::string load_page_file() {
     return body;
 }
 
-std::string page_route(const std::string & path) {
-    const size_t q = path.find('?');
-    std::string route = q == std::string::npos ? path : path.substr(0, q);
-    if (route.size() > 1 && route.back() == '/') {
-        route.pop_back();
-    }
-    return route;
+void tune_socket(int fd) {
+#ifdef SO_NOSIGPIPE
+    int nosig = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosig, sizeof(nosig));
+#endif
+#ifdef TCP_NODELAY
+    int nodelay = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+#endif
 }
 
 void reply_raw(int fd, int code, const char * type, const std::string & body, bool head_only) {
     const char * text = code == 200 ? "OK" : code == 204 ? "No Content" : code == 404 ? "Not Found"
-                      : code == 400 ? "Bad Request" : "Error";
+                      : code == 400 ? "Bad Request" : code == 500 ? "Internal Server Error" : "Error";
     const std::string head = "HTTP/1.0 " + std::to_string(code) + " " + text +
-                             "\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: " + type +
+                             "\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nContent-Type: " + type +
                              "\r\nContent-Length: " + std::to_string(body.size()) +
                              "\r\nConnection: close\r\n\r\n";
     send_all(fd, head);
@@ -1023,72 +1084,214 @@ void reply_raw(int fd, int code, const char * type, const std::string & body, bo
     }
 }
 
-void serve_page() {
+void reply_redirect(int fd) {
+    send_all(fd, "HTTP/1.0 302 Found\r\nLocation: /\r\nContent-Length: 0\r\n"
+                 "Cache-Control: no-store\r\nConnection: close\r\n\r\n");
+}
+
+void idle_client(int fd, const std::string & page) {
+    timeval tv = { 4, 0 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    tune_socket(fd);
+    std::string method, path, body, error = read_request(fd, &method, &path, &body);
+    if (!error.empty()) {
+        reply_raw(fd, 400, "application/json", std::string("{\"error\":\"") + error + "\"}", false);
+        return;
+    }
+    if (method == "OPTIONS") {
+        reply_raw(fd, 204, "text/plain", "", true);
+        return;
+    }
+    const bool head = method == "HEAD";
+    const std::string idle_info = std::string("{\"name\":\"ArtemisLM PS5\",\"version\":\"") + PS5LM_VERSION +
+                                  "\",\"chat_port\":" + std::to_string(kChatPort) +
+                                  ",\"library_port\":" + std::to_string(kLibraryPort) + ",\"model\":null}";
+    switch (idle_answer(method, idle_route(path))) {
+    case IdleAnswer::page:
+        if (!page.empty()) {
+            reply_raw(fd, 200, "text/html; charset=utf-8", page, head);
+        } else {
+            reply_raw(fd, 500, "text/plain", "The page file is missing", head);
+        }
+        break;
+    case IdleAnswer::redirect:
+        reply_redirect(fd);
+        break;
+    case IdleAnswer::models:
+        reply_raw(fd, 200, "application/json", "{\"object\":\"list\",\"data\":[]}", head);
+        break;
+    case IdleAnswer::health:
+        reply_raw(fd, 503, "application/json", kIdleJson, head);
+        break;
+    case IdleAnswer::info:
+        reply_raw(fd, 200, "application/json", idle_info, head);
+        break;
+    case IdleAnswer::other:
+        reply_raw(fd, 503, "application/json", kIdleJson, head);
+        break;
+    }
+}
+
+bool page_body(const std::string & body) {
+    return body.find("<!doctype") != std::string::npos || body.find("<html") != std::string::npos;
+}
+
+void check_page(std::function<void(const std::string &)> note, int gen) {
+    std::string body;
+    for (int i = 0; i < 3 && gen == g_page_gen.load(); ++i) {
+        body = http_get(kPagePort, "/", 2);
+        if (page_body(body)) {
+            if (gen == g_page_gen.load() && note) {
+                note("");
+            }
+            std::printf("artemislm-ps5: page check ok, %zu bytes\n", body.size());
+            return;
+        }
+        sleep(1);
+    }
+    if (gen != g_page_gen.load() || !note) {
+        return;
+    }
+    const char * why = "The page port did not answer";
+    if (body.find("missing") != std::string::npos) {
+        why = "The page file is missing";
+    } else if (!body.empty()) {
+        why = "The page port answered, but not with the page";
+    }
+    std::printf("artemislm-ps5: page check failed: %s\n", why);
+    note(why);
+}
+
+bool accept_transient(int err) {
+    return err == EINTR || err == EAGAIN || err == EWOULDBLOCK || err == ECONNABORTED || err == EPROTO;
+}
+
+void serve_page(const std::function<void(const std::string &)> & note) {
     const std::string page = load_page_file();
     if (page.empty()) {
         std::printf("artemislm-ps5: %s is missing\n", kPageFile);
+        if (note) {
+            note("The page file is missing");
+        }
+    } else {
+        std::printf("artemislm-ps5: page file %zu bytes\n", page.size());
     }
-    const int srv = socket(AF_INET, SOCK_STREAM, 0);
-    if (srv < 0) {
-        std::printf("artemislm-ps5: page port failed to open\n");
-        return;
-    }
-    int on = 1;
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    sockaddr_in addr = {};
-#ifdef __FreeBSD__
-    addr.sin_len = sizeof(addr);
-#endif
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons((uint16_t) kPagePort);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 4) != 0) {
-        std::printf("artemislm-ps5: page port %d is in use\n", kPagePort);
-        close(srv);
-        return;
-    }
-    std::printf("artemislm-ps5: page on port %d, no model loaded\n", kPagePort);
     for (;;) {
-        const int fd = accept(srv, nullptr, nullptr);
-        if (fd < 0) {
+        if (g_page_stop.load()) {
+            return;
+        }
+        net_up();
+        const int srv = socket(AF_INET, SOCK_STREAM, 0);
+        if (srv < 0) {
+            std::printf("artemislm-ps5: page port failed to open, errno %d\n", errno);
+            if (note) {
+                note("The page port did not open");
+            }
+            sleep(1);
             continue;
         }
-        timeval tv = { 8, 0 };
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-        std::string method, path, body, error = read_request(fd, &method, &path, &body);
-        if (!error.empty()) {
-            reply_raw(fd, 400, "application/json", std::string("{\"error\":\"") + error + "\"}", false);
-        } else if (method == "OPTIONS") {
-            reply_raw(fd, 204, "text/plain", "", true);
-        } else {
-            const std::string route = page_route(path);
-            const bool head = method == "HEAD";
-            const bool read = method == "GET" || head;
-            const bool page_get = read && (route == "/" || route == "/index.html");
-            const std::string idle_info = std::string("{\"name\":\"ArtemisLM PS5\",\"version\":\"") + PS5LM_VERSION +
-                                          "\",\"chat_port\":" + std::to_string(kChatPort) +
-                                          ",\"library_port\":" + std::to_string(kLibraryPort) + ",\"model\":null}";
-            if (page_get && !page.empty()) {
-                reply_raw(fd, 200, "text/html; charset=utf-8", page, head);
-            } else if (page_get) {
-                reply_raw(fd, 500, "text/plain", "The page file is missing", head);
-            } else if (read && route == "/v1/models") {
-                reply_raw(fd, 200, "application/json", "{\"object\":\"list\",\"data\":[]}", head);
-            } else if (read && (route == "/artemis" || route == "/health")) {
-                reply_raw(fd, route == "/health" ? 503 : 200, "application/json",
-                          route == "/health" ? std::string(kIdleJson) : idle_info, head);
-            } else {
-                reply_raw(fd, 503, "application/json", kIdleJson, head);
+        int on = 1;
+        setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+        tune_socket(srv);
+        sockaddr_in addr = {};
+#ifdef __FreeBSD__
+        addr.sin_len = sizeof(addr);
+#endif
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons((uint16_t) kPagePort);
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 16) != 0) {
+            std::printf("artemislm-ps5: page port %d is not open, errno %d\n", kPagePort, errno);
+            if (note) {
+                note("The page port is not open yet");
             }
+            close(srv);
+            sleep(1);
+            continue;
         }
-        close(fd);
+        const std::string ip = local_address();
+        std::printf("artemislm-ps5: page on port %d, no model loaded%s%s\n", kPagePort, ip.empty() ? "" : ", ",
+                    ip.c_str());
+        g_page_fd.store(srv);
+        if (g_page_stop.load()) {
+            const int held = g_page_fd.exchange(-1);
+            if (held >= 0) {
+                close(held);
+            }
+            return;
+        }
+        const int gen = g_page_gen.fetch_add(1) + 1;
+        std::thread(check_page, note, gen).detach();
+        for (;;) {
+            const int fd = accept(srv, nullptr, nullptr);
+            if (fd < 0) {
+                const int err = errno;
+                if (g_page_stop.load()) {
+                    break;
+                }
+                if (accept_transient(err)) {
+                    continue;
+                }
+                std::printf("artemislm-ps5: page accept stopped, errno %d\n", err);
+                if (note) {
+                    note("The page port stopped. Opening it again");
+                }
+                break;
+            }
+            std::thread([fd, &page] {
+                try {
+                    idle_client(fd, page);
+                } catch (const std::exception &) {
+                }
+                close(fd);
+            }).detach();
+        }
+        const int held = g_page_fd.exchange(-1);
+        if (held >= 0) {
+            close(held);
+        }
+        if (g_page_stop.load()) {
+            return;
+        }
+        sleep(1);
     }
 }
 
 }  // namespace
 
-void page_start() { std::thread(serve_page).detach(); }
+void page_start(std::function<void(const std::string &)> note) {
+    // The console's default thread stack is small. Reading the page stays on this one.
+    auto saved = note;
+    auto * run = new std::function<void()>([note = std::move(note)] { serve_page(note); });
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 4u << 20);
+    pthread_t thread{};
+    const int rc = pthread_create(&thread, &attr, [](void * p) -> void * {
+        (*static_cast<std::function<void()> *>(p))();
+        return nullptr;
+    }, run);
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
+        std::printf("artemislm-ps5: page thread failed to start\n");
+        delete run;
+        if (saved) {
+            saved("The page thread did not start");
+        }
+        return;
+    }
+    pthread_detach(thread);
+}
+
+void page_stop() {
+    g_page_stop.store(true);
+    const int fd = g_page_fd.exchange(-1);
+    if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
+    }
+}
 
 void panel_start(Market * market, double budget_gib) {
     {
@@ -1097,6 +1300,15 @@ void panel_start(Market * market, double budget_gib) {
         g_budget = budget_gib;
     }
     std::thread(serve).detach();
+}
+
+void panel_stop() {
+    g_panel_stop.store(true);
+    const int fd = g_panel_fd.exchange(-1);
+    if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
+    }
 }
 
 void panel_set_budget(double budget_gib) {

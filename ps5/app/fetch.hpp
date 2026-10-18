@@ -32,4 +32,8 @@ FetchResult https_get(const std::string & url, const std::string & range,
 // `agent` is the User-Agent, or null for the app's own.
 int https_template(const char * agent = nullptr);
 
+// The console network stack, once. A listen socket opened before this can
+// come up with no path in from the LAN. Safe to call again.
+bool net_up();
+
 }  // namespace ps5lm

@@ -1,0 +1,30 @@
+diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
+--- a/tools/server/server-http.cpp
++++ b/tools/server/server-http.cpp
+@@ -6,6 +6,8 @@
+ 
+ #include <cpp-httplib/httplib.h>
+ 
++#include <cerrno>
++#include <chrono>
+ #include <functional>
+ #include <future>
+ #include <memory>
+@@ -523,6 +525,17 @@ bool server_http_context::start() {
+             }
+         } else {
+             was_bound = srv->bind_to_port(host, port);
++            // PS5LM: LoadExec starts this process while the previous one can
++            // still be listening. One refusal used to exit before the model
++            // loaded. Try once a second until the port is free.
++            for (int attempt = 0; !was_bound && attempt < 30; ++attempt) {
++                const int err = errno;
++                SRV_ERR("couldn't bind HTTP server socket, hostname: %s, port: %d (errno %d); trying again\n",
++                        host.c_str(), port, err);
++                std::this_thread::sleep_for(std::chrono::seconds(1));
++                srv->stop(); // a failed bind marks the server finished
++                was_bound = srv->bind_to_port(host, port);
++            }
+         }
+         if (!was_bound) {
+             SRV_ERR("couldn't bind HTTP server socket, hostname: %s, port: %d\n", host.c_str(), port);

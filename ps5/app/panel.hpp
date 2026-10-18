@@ -10,6 +10,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <functional>
 #include <string>
 
 namespace ps5lm {
@@ -17,7 +18,15 @@ namespace ps5lm {
 class Market;
 
 void panel_start(Market * market, double budget_gib);
-void page_start();
+// Close the library socket. A model change restarts the process, and the
+// next one cannot listen while this socket is still open.
+void panel_stop();
+// Serves the phone page on 47281 until a model load restarts the app.
+// `note` is called with an empty string when a browser can open the page,
+// or with a short reason when it cannot. It may run on the page thread.
+void page_start(std::function<void(const std::string &)> note);
+// Close the page socket before that restart. See panel_stop().
+void page_stop();
 void panel_set_budget(double budget_gib);
 void panel_set_running(const std::string & path);
 int  panel_generation();

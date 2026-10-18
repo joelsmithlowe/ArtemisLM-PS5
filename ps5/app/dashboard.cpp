@@ -1680,7 +1680,9 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
     // Left: the model.
     if (!loaded || live_.state == ServerState::no_model) {
         put(l, f.regular, "Nothing is loaded", kLeft, 260, 26, kInk2);
-        put(l, f.regular, "The page is open", kLeft, 340, 64, kInk);
+        // phase is also the startup line. It is a page fault only once nothing is loaded.
+        const bool page_fault = live_.state == ServerState::no_model && !live_.phase.empty();
+        put(l, f.regular, page_fault ? "The page did not open" : "The page is open", kLeft, 340, 64, page_fault ? kRed : kInk);
         put(l, f.regular, "Download a model in Library, or add a folder in Settings.", kLeft, 400, 24, kInk2);
         put(l, f.regular, format("%.0f models on this PS5", (double) live_.models.size()), kLeft, 444, 24, kInk3);
         const auto setup = wrap(f.regular, setup_line(settings_), 22, 900);
@@ -1689,7 +1691,10 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
         }
         if (!live_.address.empty()) {
             put(l, f.regular, "On your network", kLeft, 572, 22, kInk3);
-            put(l, f.regular, "http://" + live_.address, kLeft, 618, 32, kInk2);
+            put(l, f.regular, f.regular.font->fit("http://" + live_.address, 32, 900), kLeft, 618, 32, kInk2);
+        }
+        if (page_fault) {
+            put(l, f.regular, f.regular.font->fit(live_.phase, 22, 900), kLeft, 662, 22, kRed);
         }
         std::string room;
         if (live_.pool_gib > 0) {
@@ -1702,7 +1707,7 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
             room += format("%.0f", live_.drives[0].free) + " GB free on " + live_.drives[0].name;
         }
         if (!room.empty()) {
-            put(l, f.regular, f.regular.font->fit(room, 22, 900), kLeft, 676, 22, kInk3);
+            put(l, f.regular, f.regular.font->fit(room, 22, 900), kLeft, page_fault ? 704 : 676, 22, kInk3);
         }
         draw_flight(l, kLeft + 280, 820, clock_);
     } else {
@@ -2153,8 +2158,11 @@ void Dashboard::draw_api(gfx::DrawList & l) const {
     put(l, f.semibold, "API", kLeft, kTitleY, 44, kInk);
     const std::string base = live_.address.empty() ? std::string("http://<PS5 address>:") + std::to_string(kChatPort)
                                                    : "http://" + live_.address;
-    put(l, f.regular, "Base address", kLeft, 262, 24, kInk2);
-    put(l, f.regular, base + "/v1", kLeft, 316, 44, kInk);
+    // With nothing loaded, the address a browser opens is the page itself.
+    // /v1 is the API prefix, and that path is not the page.
+    const std::string shown = loaded ? base + "/v1" : base;
+    put(l, f.regular, loaded ? "Base address" : "Page", kLeft, 262, 24, kInk2);
+    put(l, f.regular, f.regular.font->fit(shown, 44, 880), kLeft, 316, 44, kInk);
     put(l, f.regular,
         loaded ? "Any device on this network can call it, with any model name: the loaded one answers."
                : "Nothing is loaded. Open this address to download a model or add a folder.",
@@ -2193,7 +2201,9 @@ void Dashboard::draw_api(gfx::DrawList & l) const {
         f.regular.font->fit("Port " + std::to_string(kLibraryPort) + "    POST /v1/agent    POST /reference", 20, p.w - 96),
         p.x + 48, p.y + 104, 20, kInk3);
     if (!loaded) {
-        put(l, f.regular, "The page is open with no model.", p.x + 48, p.y + 156, 22, kInk);
+        const bool page_fault = live_.state == ServerState::no_model && !live_.phase.empty();
+        put(l, f.regular, f.regular.font->fit(page_fault ? live_.phase : "The page is open with no model.", 22, p.w - 96),
+            p.x + 48, p.y + 156, 22, page_fault ? kRed : kInk);
         put(l, f.regular, "Library can download one.", p.x + 48, p.y + 198, 22, kInk2);
         put(l, f.regular, "Settings can add a folder.", p.x + 48, p.y + 240, 22, kInk2);
         const auto setup = wrap(f.regular, setup_line(settings_), 20, p.w - 96);

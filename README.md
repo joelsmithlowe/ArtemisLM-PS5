@@ -27,9 +27,9 @@ phone page cover context, flash attention, the prompt batch, and how much spare 
 The current setup is written in one line, and a choice that leaves the measured default is marked.
 Measured is the spare this console was tested with. Agent mode names a coordinator and a worker.
 The console keeps one model on the GPU. Plan writes a short plan and then the answer on the loaded
-model. Hand off, from the page, restarts onto the worker after the plan. LM Studio can call the
-console as an agent at `http://<PS5>:47282/mcp`, or by launching `scripts/lmstudio/artemis-mcp.mjs`.
-An OpenAI client still uses port 47281.
+model. Hand off, from the page, restarts onto the worker after the plan. LM Studio does not take
+the PlayStation as one of its own models. It calls the console as an agent at
+`http://<PS5>:47282/mcp`. The steps are [below](#lm-studio). An OpenAI client still uses port 47281.
 
 <p align="center">
   <img src="docs/media/artemislm-ps5-mark.gif" width="720" alt="ArtemisLM PS5">
@@ -49,8 +49,9 @@ An OpenAI client still uses port 47281.
 - **It answers your network.** OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages` (Claude Code
   works against it) and a chat page in any browser. Point a client at `http://<console>:47281` and use
   any model name: the loaded one answers. With nothing loaded, that address still opens the page, so a
-  model can be downloaded or a folder added. The paths are unchanged. Port 47282 lists the models,
-  and can load or unload one.
+  model can be downloaded or a folder added. The paths are unchanged. Port 47282 is the library: it
+  lists models, loads and unloads, saves settings, and answers `POST /mcp`, `POST /v1/agent`, and
+  `POST /reference`.
 - **It decides, too.** Load a decision model and the console answers TypeSafe's `/v1/systemone`:
   choice, score and yes-or-no questions about text and images, the API Ollaya serves on a PC.
 - **It shows its work.** Every request streams across the TV as a chat: which device asked, what it
@@ -145,6 +146,84 @@ over the old one still works. Using it from coding tools (opencode, Codex, Claud
 | Console | L2 / R2 | the last two minutes / the last hour |
 | Settings | D-pad, Cross | choose a category and a row; flip it, or pick from its list |
 | Settings, Diagnostics | Square, Triangle | app or server log; errors only |
+
+## The screens
+
+L1 and R1 move along the bottom: **Home**, **Models**, **API**, **Console**, **Settings**.
+
+**Home** is the status page. With nothing loaded it says the page is open, shows the setup in one line, the network address, free memory, and free space on the first drive. Square sends a demo and Triangle opens the keyboard. With a model loaded it shows the context, the cache, and whether two chats are on. A strip along the bottom reads GPU, CPU, prompt speed, and any setup that is not the measured default. Green means Ready. Blue means a reply is being written. Red means the model stopped.
+
+**Models** has four lists: on this PS5, Suggested, Search, and Downloads. Search steps through Popular, Qwen, Gemma, Llama, Mistral, Phi, and Granite. Square on a file checks whether it fits. A download that needs the memory asks before it unloads the model that is loaded.
+
+**API** is the address page. With nothing loaded it prints the page, `http://<console>:47281`. With a model loaded it prints the API base, `http://<console>:47281/v1`. Under that, the LM Studio agent is `http://<console>:47282/mcp`. Opening `/v1` in a browser with nothing loaded is sent to the page. Six rows are the chat port:
+
+| | | |
+|---|---|---|
+| POST | `/v1/chat/completions` | OpenAI chat, streaming and tools |
+| POST | `/v1/messages` | Anthropic Messages, for Claude Code |
+| POST | `/v1/completions` | Plain text completion |
+| POST | `/v1/systemone` | Decision questions, when a decision model is loaded |
+| GET | `/v1/models` | The loaded model. An empty list when nothing is loaded |
+| GET | `/health` | Ready, or 503 while nothing is loaded |
+
+A row is lit when it matches the model that is loaded. The panel on the right counts how many answers have been served and names the two library calls that do not fit on that list: `POST /v1/agent` and `POST /reference`, both on port 47282. An example curl is drawn under that. With nothing loaded, the same panel says the page is open and repeats the setup line.
+
+**Console** charts temperature, power, GPU, and CPU for the last two minutes or the last hour. The header reads Cool, Warm from 70°C, or Hot from 85°C. Hot is a label on the screen. It is not a point where the app shuts down.
+
+**Settings** has nine categories: Startup, Library, Context, Sampling, Chat, Agent, Sound and storage, Diagnostics, and Credits. A value that leaves the measured default is marked, and that category gets a mark on the left. Context, cache, flash attention, the prompt batch, chats at once, memory fit, and sampling apply at the next load. File tools, web search, the clock, how many search hits to keep, and how many messages the phone sends apply to the next question. Credits is the list of the work this build stands on. Diagnostics shows the app log or the server log.
+
+The phone page, `http://<console>:47281`, has three tabs: Chat, Library, and Settings. Settings uses the same groups. An extra model folder can be typed there. It has to be an existing folder under `/data` or `/mnt`. Clearing the scratch folder is on the television only.
+
+## LM Studio
+
+LM Studio keeps its own model on the computer. The PlayStation is an agent it can call. On a current install the console speaks that protocol itself, so LM Studio does not need a program on the computer.
+
+Open **Program** in the right-hand sidebar, then **Install**, then **Edit mcp.json**. LM Studio reads that file when you save it. Add the address from the API page. There is no token.
+
+```json
+{
+  "mcpServers": {
+    "artemis-ps5": {
+      "url": "http://192.168.1.19:47282/mcp"
+    }
+  }
+}
+```
+
+Use the console's address. The call is `POST /mcp` with one JSON-RPC message. `GET /mcp` only tells the client to post. The console answers in this order:
+
+1. `initialize` returns the name ArtemisLM PS5, the app version, and that tools are available.
+2. `notifications/initialized` is accepted and has no body.
+3. `tools/list` returns five tools.
+4. `tools/call` runs one tool and returns its text. A failed tool comes back with `isError`. An unknown name is rejected the same way. There is no shell tool.
+
+| Tool | Does |
+|---|---|
+| `artemis_status` | Version, the loaded file, agent mode, the chat address, and the MCP address |
+| `artemis_models` | Each installed model, whether it fits, its context, and its path |
+| `artemis_ask` | One question to the loaded chat model. When Agent mode is Plan or Hand off, a short plan is written first on that same model. A long prompt can take minutes |
+| `artemis_load` | Restarts the app onto a path from `artemis_models`. Wait, then call `artemis_status`, before the next ask. A model that does not fit is refused |
+| `artemis_reference` | The tables kept in the app. `tool` is `convert`, `calendar`, `lookup`, `text`, or `note`. Nothing is downloaded and nothing is written under `/data` |
+
+One model stays on the GPU. Hand off does not restart from this call. The answer stays on the loaded model, and the text says so. A decision model cannot take `artemis_ask`. Those questions stay on `POST /v1/systemone` at port 47281.
+
+`POST /v1/agent` on port 47282 is the same ask without the tool wrapper. The body can carry `prompt`, `system`, `messages`, `max_tokens`, and `plan`. The reply is an OpenAI chat completion plus an `artemis` object with the plan.
+
+A console that does not yet speak `/mcp` can still be reached by a small program LM Studio launches. `artemis_reference` through that program needs 0.12.0 or later on the console. The other four tools have been there since 0.10.0.
+
+```json
+{
+  "mcpServers": {
+    "artemis-ps5": {
+      "command": "node",
+      "args": ["D:/path/to/PS5LM-0.9.0/scripts/lmstudio/artemis-mcp.mjs"],
+      "env": { "ARTEMIS_HOST": "192.168.1.19" }
+    }
+  }
+}
+```
+
+The copy to edit is [scripts/lmstudio/mcp.example.json](scripts/lmstudio/mcp.example.json). Coding tools that want the console as their own model, rather than as an agent, are in [docs/CLI.md](docs/CLI.md).
 
 ## Want to tinker?
 
