@@ -65,6 +65,8 @@
     color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.4rem 0.7rem; }
   .check { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; color: var(--body); }
   .note { color: var(--muted); font-size: 0.875rem; line-height: 1.45; margin: 0 0 0.8rem; }
+  .field.changed select, .field.changed input { border-color: var(--accent); }
+  .check.changed { box-shadow: inset 3px 0 0 var(--accent); padding-left: 0.45rem; }
   .status { color: var(--faint); font-size: 0.875rem; margin: 0 0 0.6rem; }
   body.away .composer { display: none; }
 
@@ -204,6 +206,9 @@
   var MEMORY_TOOL = { memory_save: 'save', memory_find: 'find', memory_list: 'list', memory_forget: 'forget' };
   var FILES_NAMES = { files_list: 1, files_read: 1 };
   var FILES_TOOL = { files_list: 'list', files_read: 'read' };
+  var REF_NAMES = { convert_units: 'convert', calendar: 'calendar', lookup: 'lookup', text_codec: 'text' };
+  var REF_WORDS = ['convert', 'conversion', 'kilometer', 'kilometre', 'mile', 'miles', 'celsius', 'fahrenheit', 'kelvin', 'kilogram', 'pound', 'pounds', 'gallon', 'litre', 'liter', 'weekday', 'calendar', 'atomic', 'element', 'base64', 'sha256', 'sha-256', 'nanometer', 'gigabyte', 'kibibyte', 'mebibyte', 'status code'];
+  var referenceTurn = false;
   var CODE_VERBS = ['create', 'build', 'write', 'make', 'add', 'fix', 'review', 'check', 'scaffold'];
   var CODE_NOUNS = ['app', 'server', 'website', 'webpage', 'html', 'node', 'python', 'script', 'project', 'program'];
   var SHELF_WORDS = ['file', 'files', 'folder', 'folders', 'usb', 'drive', 'scratch', 'project', 'projects', 'remember', 'memory', 'memories', 'note', 'notes', 'forget'];
@@ -339,14 +344,16 @@
     var s = 'You are ArtemisLM PS5, running on a PlayStation 5. When the message includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed or has no figure, say so. Be direct.';
     if (kind === 'search') s += ' Call web_fetch on one link only when the snippet is not enough. A question that says research or scrape already includes the text of one page.';
     if (kind === 'code') s += ' File tools are on. Projects are folders in /data/ArtemisLM/projects, next to the models folder. Call project_create, then project_write for each source file, then project_review. Call project_remove to delete one file. It does not delete the project folder. Fix every review error before you say the build is ready. Kinds are node-server, static-page and python. Keep each file under 12000 characters. Allowed endings are .js .mjs .cjs .json .html .css .md .txt .py .svg. Put page script in a .js file. Do not use a JavaScript regex literal; use new RegExp. This console stores and reviews the files. It cannot start Node or Python. Tell the user the folder path and the command to run on a computer.';
+    if (referenceTurn) s += ' A reference line was computed on this console. Use that figure and do not replace it. Call convert_units, calendar, lookup, or text_codec when you need another figure from the same tables.';
     return s;
   }
 
-  function evidence(text, clock, search, math, memory) {
+  function evidence(text, clock, search, math, memory, ref) {
     var parts = [];
     if (memory) parts.push(memory);
     if (clock) parts.push(clock);
     if (math) parts.push(math);
+    if (ref) parts.push(ref);
     if (search) parts.push(search);
     if (!parts.length) return text;
     return parts.join('\n\n') + '\n\nQuestion: ' + text;
@@ -447,6 +454,14 @@
       { type: 'function', function: { name: 'files_read', description: 'Read one text file inside projects, scratch, models, usb0, usb1, or m2. Refuses programs and model files.', parameters: { type: 'object', properties: { root: { type: 'string' }, path: { type: 'string' } }, required: ['root', 'path'] } } }
     ];
   }
+  function referenceDefs() {
+    return [
+      { type: 'function', function: { name: 'convert_units', description: 'Convert a number with the units stored on this console. Length, mass, temperature, volume, area, speed, data size, time, pressure, and energy. KB is 1000 bytes. KiB is 1024.', parameters: { type: 'object', properties: { value: { type: 'number' }, from: { type: 'string', description: 'Unit name, such as km, lb, or celsius' }, to: { type: 'string' } }, required: ['value', 'from', 'to'] } } },
+      { type: 'function', function: { name: 'calendar', description: 'Calendar arithmetic stored on this console. Weekday of a date, days between two dates, or a date plus days. Dates are YYYY-MM-DD.', parameters: { type: 'object', properties: { op: { type: 'string', description: 'weekday, between, or add' }, date: { type: 'string' }, end: { type: 'string', description: 'Second date, for between' }, days: { type: 'integer', description: 'Days to add. Negative goes backward.' } }, required: ['op', 'date'] } } },
+      { type: 'function', function: { name: 'lookup', description: 'Look up a value stored on this console. kind is constant, element, http, or prefix.', parameters: { type: 'object', properties: { kind: { type: 'string' }, name: { type: 'string', description: 'pi, speed of light, iron, Fe, or nano' }, code: { type: 'integer', description: 'HTTP status code, such as 404' } }, required: ['kind'] } } },
+      { type: 'function', function: { name: 'text_codec', description: 'Encode or measure text on this console. op is base64, unbase64, hex, sha256, or count. At most 8000 characters.', parameters: { type: 'object', properties: { op: { type: 'string' }, text: { type: 'string' } }, required: ['op', 'text'] } } }
+    ];
+  }
   function defsFor(kind) {
     var out = [];
     if (kind === 'code') out = projectDefs();
@@ -462,6 +477,10 @@
     if (fileToolsOn && kind !== 'code' && anyWord(String(asked || '').toLowerCase(), SHELF_WORDS)) {
       var shelf = shelfDefs();
       for (var s = 0; s < shelf.length; s++) out.push(shelf[s]);
+    }
+    if (referenceTurn) {
+      var refs = referenceDefs();
+      for (var r = 0; r < refs.length; r++) out.push(refs[r]);
     }
     return out;
   }
@@ -500,6 +519,27 @@
         path: params && params.path ? params.path : ''
       };
       panelSend('POST', '/files', folder, function (status, data) {
+        if (status === 200 && data && typeof data.error !== 'string') done(null, data);
+        else done(errText(status, data), data);
+      });
+      return;
+    }
+    if (REF_NAMES[name]) {
+      var figure = {
+        tool: REF_NAMES[name],
+        value: params && params.value !== undefined && params.value !== null ? params.value : '',
+        from: params && params.from ? params.from : '',
+        to: params && params.to ? params.to : '',
+        op: params && params.op ? params.op : '',
+        date: params && params.date ? params.date : '',
+        end: params && params.end ? params.end : '',
+        days: params && params.days !== undefined && params.days !== null ? params.days : '',
+        kind: params && params.kind ? params.kind : '',
+        name: params && params.name ? params.name : '',
+        code: params && params.code !== undefined && params.code !== null ? params.code : '',
+        text: params && typeof params.text === 'string' ? params.text : ''
+      };
+      panelSend('POST', '/reference', figure, function (status, data) {
         if (status === 200 && data && typeof data.error !== 'string') done(null, data);
         else done(errText(status, data), data);
       });
@@ -648,6 +688,10 @@
           else if (call.name === 'memory_forget') label = 'Forget note';
           else if (call.name === 'files_list') label = 'Browse folder';
           else if (call.name === 'files_read') label = 'Read stored file';
+          else if (call.name === 'convert_units') label = 'Convert';
+          else if (call.name === 'calendar') label = 'Calendar';
+          else if (call.name === 'lookup') label = 'Lookup';
+          else if (call.name === 'text_codec') label = 'Text';
           var slot = addTool(holder.tools, label, 'Running ' + call.name + '…', false);
           runToolCall(call, function (error, shown) {
             slot.textContent = shown;
@@ -946,23 +990,24 @@
 
     asked = text;
     var kind = classify(text);
+    referenceTurn = false;
     turn = { cancelled: false };
     busy(true);
 
     var math = mathNote(text);
-    function sendAsk(clockNote, searchNote, memoryNote) {
+    function sendAsk(clockNote, searchNote, memoryNote, refNote) {
       if (!turn || turn.cancelled) return finishStop(holder, '');
       var prior = history.slice(0, history.length - 1);
       var messages = [{ role: 'system', content: systemText(kind) }];
       for (var i = 0; i < prior.length; i++) messages.push(prior[i]);
-      messages.push({ role: 'user', content: evidence(text, clockNote, searchNote, math, memoryNote) });
+      messages.push({ role: 'user', content: evidence(text, clockNote, searchNote, math, memoryNote, refNote) });
       beginAgent(holder, messages, defsFor(kind));
     }
-    function ask(clockNote, searchNote) {
+    function ask(clockNote, searchNote, refNote) {
       if (!turn || turn.cancelled) return finishStop(holder, '');
-      if (!fileToolsOn) return sendAsk(clockNote, searchNote, '');
+      if (!fileToolsOn) return sendAsk(clockNote, searchNote, '', refNote);
       if (wantsRemember(text)) {
-        var saved = addTool(tools, 'Save note', 'Saving a note on this console…', false);
+        var saved = addTool(holder.tools, 'Save note', 'Saving a note on this console…', false);
         panelSend('POST', '/memory', { tool: 'save', text: text }, function (status, data) {
           if (!turn || turn.cancelled) return finishStop(holder, '');
           if (status === 200 && data && typeof data.error !== 'string') saved.textContent = data.text || 'Saved.';
@@ -970,7 +1015,7 @@
             saved.textContent = errText(status, data);
             saved.parentNode.className = 'tool bad';
           }
-          sendAsk(clockNote, searchNote, '');
+          sendAsk(clockNote, searchNote, '', refNote);
         });
         return;
       }
@@ -984,48 +1029,64 @@
           }
           if (lines.length) {
             memoryNote = 'Notes saved on this console:\n' + lines.join('\n');
-            addTool(tools, 'Notes', lines.join('\n'), false);
+            addTool(holder.tools, 'Notes', lines.join('\n'), false);
           }
         }
-        sendAsk(clockNote, searchNote, memoryNote);
+        sendAsk(clockNote, searchNote, memoryNote, refNote);
       });
     }
 
-    function afterClock(clockNote, day) {
-      if (kind !== 'search') return ask(clockNote, '');
+    function afterClock(clockNote, day, refNote) {
+      if (kind !== 'search') return ask(clockNote, '', refNote);
       var query = text;
       if (day && text.indexOf(day) < 0) query = text + ' ' + day;
-      var slot = addTool(tools, 'Web search', 'Searching for “' + query + '”…', false);
+      var slot = addTool(holder.tools, 'Web search', 'Searching for “' + query + '”…', false);
       callTool('web_search', { query: query, num_results: hitCount() }, function (error, data) {
         if (!turn || turn.cancelled) return finishStop(holder, '');
         var body = error ? error : (data && typeof data.results === 'string' ? data.results : 'No results.');
         slot.textContent = body;
         if (error) slot.parentNode.className = 'tool bad';
         var note = 'Web search for "' + query + '":\n' + body;
-        ask(clockNote, note);
+        ask(clockNote, note, refNote);
       });
     }
 
-    if (math) addTool(tools, 'Calculation', math.replace('Calculation: ', ''), false);
-    if (kind === 'none' || kind === 'code') return ask('', '');
-    var slotClock = addTool(tools, 'Date and time', 'Reading the console clock…', false);
-    callTool('get_datetime', {}, function (error, data) {
+    function begin(refNote) {
+      if (math) addTool(holder.tools, 'Calculation', math.replace('Calculation: ', ''), false);
+      if (kind === 'none' || kind === 'code') return ask('', '', refNote);
+      var slotClock = addTool(holder.tools, 'Date and time', 'Reading the console clock…', false);
+      callTool('get_datetime', {}, function (error, data) {
+        if (!turn || turn.cancelled) return finishStop(holder, '');
+        var day = dayFrom(data);
+        var note;
+        if (!error && data && (data.local || data.datetime)) {
+          var shown = data.local || data.datetime;
+          if (day && shown.indexOf(day) < 0) shown = day + ' ' + shown;
+          slotClock.textContent = shown;
+          note = 'Console clock (get_datetime): ' + (data.datetime || day) + (data.local ? ' (' + data.local + ')' : '');
+        } else {
+          day = browserDay();
+          var fallback = (error ? error + ' ' : '') + 'Using the phone clock instead: ' + day + '.';
+          slotClock.textContent = fallback;
+          slotClock.parentNode.className = 'tool bad';
+          note = 'The console clock could not be read. The phone clock says ' + day + '. Treat that as a fallback, not the console.';
+        }
+        afterClock(note, day, refNote);
+      });
+    }
+
+    panelSend('POST', '/reference', { tool: 'note', text: text }, function (status, data) {
       if (!turn || turn.cancelled) return finishStop(holder, '');
-      var day = dayFrom(data);
-      var note;
-      if (!error && data && (data.local || data.datetime)) {
-        var shown = data.local || data.datetime;
-        if (day && shown.indexOf(day) < 0) shown = day + ' ' + shown;
-        slotClock.textContent = shown;
-        note = 'Console clock (get_datetime): ' + (data.datetime || day) + (data.local ? ' (' + data.local + ')' : '');
-      } else {
-        day = browserDay();
-        var fallback = (error ? error + ' ' : '') + 'Using the phone clock instead: ' + day + '.';
-        slotClock.textContent = fallback;
-        slotClock.parentNode.className = 'tool bad';
-        note = 'The console clock could not be read. The phone clock says ' + day + '. Treat that as a fallback, not the console.';
+      var refNote = '';
+      var matched = status === 200 && data && typeof data.text === 'string' && data.text && data.text.indexOf('Nothing in this table') !== 0;
+      if (matched) {
+        refNote = 'Reference: ' + data.text;
+        referenceTurn = true;
+        addTool(holder.tools, 'Reference', data.text, false);
+      } else if (anyWord(String(text || '').toLowerCase(), REF_WORDS)) {
+        referenceTurn = true;
       }
-      afterClock(note, day);
+      begin(refNote);
     });
   }
 
@@ -1354,7 +1415,7 @@
       }
     });
   }
-  function addSelect(form, label, key, current, options) {
+  function addSelect(form, label, key, current, options, usual) {
     var wrap = document.createElement('div');
     wrap.className = 'field';
     var sel = document.createElement('select');
@@ -1369,7 +1430,7 @@
     sel.onchange = function () {
       var body = {};
       body[key] = sel.value;
-      if (key === 'ctx_cap' || key === 'slots' || key === 'max_tokens' || key === 'plan_tokens' || key === 'remember' || key === 'search_hits') body[key] = Number(sel.value);
+      if (key === 'ctx_cap' || key === 'slots' || key === 'max_tokens' || key === 'plan_tokens' || key === 'remember' || key === 'search_hits' || key === 'scratch_limit_gib') body[key] = Number(sel.value);
       if (key === 'agent') agentMode = sel.value;
       if (key === 'coordinator') agentCoordinator = sel.value;
       if (key === 'worker') agentWorker = sel.value;
@@ -1378,6 +1439,7 @@
       if (key === 'search_hits') searchHits = Number(sel.value);
       saveSetting(body);
     };
+    if (usual !== undefined && String(current) !== String(usual)) wrap.className = 'field changed';
     wrap.appendChild(sel);
     form.appendChild(wrap);
   }
@@ -1396,9 +1458,9 @@
     if (current && !saw) options.push([current, 'Missing']);
     addSelect(form, label, key, current || '', options);
   }
-  function addCheck(form, label, key, on) {
+  function addCheck(form, label, key, on, usual) {
     var wrap = document.createElement('label');
-    wrap.className = 'check';
+    wrap.className = (usual !== undefined && (!!on) !== (!!usual)) ? 'check changed' : 'check';
     var box = document.createElement('input');
     box.type = 'checkbox';
     box.checked = !!on;
@@ -1415,7 +1477,7 @@
   function saveSetting(body) {
     var status = document.getElementById('set-status');
     panelSend('POST', '/settings', body, function (code, data) {
-      status.textContent = data && data.ok ? 'Saved. A loaded model keeps its current limits until the next load.' : ((data && data.error) || 'Could not save');
+      status.textContent = data && data.ok ? 'Saved. A loaded model keeps context, cache, attention, batch, slots, memory, and sampling until the next load.' : ((data && data.error) || 'Could not save');
     });
   }
   var updateTimer = 0;
@@ -1444,6 +1506,30 @@
       }
     });
   }
+  function setupSentence(data) {
+    var mem = data.memory === 'tight' ? 'Tight spare' : data.memory === 'roomy' ? 'More spare' : 'Measured spare';
+    var fa = data.flash_attn === 'off' ? 'flash attention off' : data.flash_attn === 'auto' ? 'flash attention automatic' : 'flash attention on';
+    var batch = data.batch === 'wide' ? 'a wide prompt batch' : data.batch === 'medium' ? 'a medium prompt batch' : 'a safe prompt batch';
+    var chats = String(data.slots) === '2' ? 'two chats' : 'one chat';
+    var line = mem + '. ' + fa + ', ' + batch + ', ' + chats + '.';
+    if (data.agent === 'plan') line += ' Agent writes a plan first.';
+    else if (data.agent === 'handoff') line += ' Agent can hand off, which restarts the app.';
+    return line;
+  }
+  function addGroup(form, title, note) {
+    var card = document.createElement('div');
+    card.className = 'card';
+    var h = document.createElement('h2');
+    h.textContent = title;
+    card.appendChild(h);
+    if (note) {
+      var p = document.createElement('p');
+      p.textContent = note;
+      card.appendChild(p);
+    }
+    form.appendChild(card);
+    return card;
+  }
   function loadSettings() {
     var status = document.getElementById('set-status');
     var form = document.getElementById('set-form');
@@ -1455,55 +1541,27 @@
         return;
       }
       takeSettings(data);
-      status.textContent = 'Changes apply on the console. Context, memory, repeat penalty, min-p, and seed apply at the next load.';
+      status.textContent = 'A loaded model keeps context, cache, attention, batch, slots, memory, and sampling until the next load.';
       panelSend('GET', '/library', null, function (libCode, lib) {
       var models = lib && lib.models ? lib.models : [];
       var mi;
       for (mi = 0; mi < models.length; mi++) {
         if (models[mi] && models[mi].current && models[mi].file) loadedPath = models[mi].file;
       }
-      var agentNote = document.createElement('p');
-      agentNote.className = 'note';
-      agentNote.textContent = data.agent_note || 'The console keeps one model on the GPU.';
-      form.appendChild(agentNote);
-      addSelect(form, 'Agent mode', 'agent', data.agent || 'off', [['off', 'Off'], ['plan', 'Plan'], ['handoff', 'Hand off']]);
-      addModelSelect(form, 'Coordinator', 'coordinator', data.coordinator || '', models);
-      addModelSelect(form, 'Worker', 'worker', data.worker || '', models);
-      addSelect(form, 'Plan length', 'plan_tokens', data.plan_tokens || 256, [['128', 'Short'], ['256', 'Medium'], ['512', 'Long']]);
-      addSelect(form, 'Repeat penalty', 'repeat_penalty', data.repeat_penalty || 'off', [['off', 'Off'], ['light', 'Light'], ['medium', 'Medium'], ['strong', 'Strong']]);
-      addSelect(form, 'Minimum probability', 'min_p', data.min_p || 'off', [['off', 'Off'], ['0.05', '0.05'], ['0.10', '0.10']]);
-      addSelect(form, 'Seed', 'seed', data.seed || 'random', [['random', 'Random'], ['42', '42'], ['7', '7'], ['1234', '1234']]);
-      addSelect(form, 'Messages to send', 'remember', data.remember || 16, [['8', '8'], ['16', '16'], ['32', '32']]);
-      addSelect(form, 'Search results', 'search_hits', data.search_hits || 5, [['3', '3'], ['5', '5'], ['8', '8']]);
-      addCheck(form, 'Also read PS5LM and PS5LM Plus (/data/PS5LM/models)', 'scan_ps5lm', data.scan_ps5lm);
-      addCheck(form, 'Also read M.2, USB and loose files', 'scan_usb', data.scan_usb);
-      addSelect(form, 'Models elsewhere', 'migrate', data.migrate, [['ask', 'Ask'], ['off', 'Leave them'], ['on', 'Move into ArtemisLM']]);
-      addSelect(form, 'Memory fit', 'memory', data.memory, [['measured', 'Measured'], ['tight', 'Tight'], ['roomy', 'More spare']]);
-      addSelect(form, 'Longest context', 'ctx_cap', data.ctx_cap, [['4096', '4k'], ['8192', '8k'], ['16384', '16k'], ['32768', '32k'], ['65536', '64k'], ['131072', '128k']]);
-      addSelect(form, 'Context cache', 'kv_type', data.kv_type, [['auto', 'Auto'], ['f16', 'f16'], ['q8_0', 'q8_0'], ['q4_0', 'q4_0']]);
-      addSelect(form, 'Flash attention', 'flash_attn', data.flash_attn, [['on', 'On'], ['auto', 'Auto'], ['off', 'Off']]);
-      addSelect(form, 'Prompt batch', 'batch', data.batch, [['safe', 'Safe'], ['medium', 'Medium'], ['wide', 'Wide']]);
-      addSelect(form, 'Chats at once', 'slots', data.slots, [['1', 'One'], ['2', 'Two']]);
-      addSelect(form, 'Reply style', 'sampling', data.sampling, [['model', 'Model'], ['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']]);
-      addSelect(form, 'Reply length', 'max_tokens', data.max_tokens, [['-1', 'Unlimited'], ['512', '512'], ['2048', '2048'], ['8192', '8192']]);
-      addSelect(form, 'Reasoning', 'reasoning', data.reasoning, [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']]);
-      addSelect(form, 'System prompt', 'system_prompt', data.system_prompt, [['home', 'Home'], ['helpful', 'Helpful'], ['concise', 'Concise'], ['none', 'None']]);
-      addSelect(form, 'Save downloads to', 'download_dir', data.download_dir, [
-        ['/data/ArtemisLM/models', 'Internal'],
-        ['/mnt/ext0/ArtemisLM/models', 'M.2'],
-        ['/mnt/usb0/ArtemisLM/models', 'USB 0'],
-        ['/mnt/usb1/ArtemisLM/models', 'USB 1']
-      ]);
-      addCheck(form, 'Web search', 'web_search', data.web_search);
-      addCheck(form, 'Date and time', 'datetime', data.datetime);
-      fileToolsOn = !!data.tools;
-      addCheck(form, 'File tools, projects, and notes', 'tools', data.tools);
+      addGroup(form, 'How this console is set', setupSentence(data));
+      var startup = addGroup(form, 'Startup', 'Off waits on the page. On loads the chosen model when the console starts.');
+      addCheck(startup, 'Load a model at launch', 'auto_load', data.auto_load, false);
+      addModelSelect(startup, 'Model to load', 'default_model', data.default_model || '', models);
+      var library = addGroup(form, 'Library', 'The home folder /data/ArtemisLM/models is always read. A move copies a file there and deletes the old one.');
+      addCheck(library, 'Also read PS5LM and PS5LM Plus (/data/PS5LM/models)', 'scan_ps5lm', data.scan_ps5lm, true);
+      addCheck(library, 'Also read M.2, USB and loose files', 'scan_usb', data.scan_usb, true);
+      addSelect(library, 'Models elsewhere', 'migrate', data.migrate, [['ask', 'Ask'], ['off', 'Leave them'], ['on', 'Move into ArtemisLM']], 'ask');
       var folderNote = document.createElement('p');
       folderNote.className = 'note';
-      folderNote.textContent = 'A folder that already has models. It must be under /data or /mnt.';
-      form.appendChild(folderNote);
+      folderNote.textContent = 'An extra folder must already have models, and it must be under /data or /mnt.';
+      library.appendChild(folderNote);
       var extra = document.createElement('div');
-      extra.className = 'field';
+      extra.className = data.extra_dir ? 'field changed' : 'field';
       var input = document.createElement('input');
       input.value = data.extra_dir || '';
       input.placeholder = 'Extra folder, /data/… or /mnt/…';
@@ -1513,7 +1571,7 @@
       save.onclick = function () { saveSetting({ extra_dir: trim(input.value) }); };
       extra.appendChild(input);
       extra.appendChild(save);
-      form.appendChild(extra);
+      library.appendChild(extra);
       if (wantFolder) {
         wantFolder = false;
         if (extra.scrollIntoView) extra.scrollIntoView();
@@ -1531,7 +1589,43 @@
         });
       };
       move.appendChild(button);
-      form.appendChild(move);
+      library.appendChild(move);
+      var context = addGroup(form, 'Context', 'Applies at the next load. Measured is the spare this console was tested with. Tight can fit a longer context and can fail a load. A wider batch fills a prompt faster and can stall the GPU.');
+      addSelect(context, 'Memory fit', 'memory', data.memory, [['measured', 'Measured'], ['tight', 'Tight'], ['roomy', 'More spare']], 'measured');
+      addSelect(context, 'Longest context', 'ctx_cap', data.ctx_cap, [['4096', '4k'], ['8192', '8k'], ['16384', '16k'], ['32768', '32k'], ['65536', '64k'], ['131072', '128k']], '65536');
+      addSelect(context, 'Context cache', 'kv_type', data.kv_type, [['auto', 'Auto'], ['f16', 'f16'], ['q8_0', 'q8_0'], ['q4_0', 'q4_0']], 'auto');
+      addSelect(context, 'Flash attention', 'flash_attn', data.flash_attn, [['on', 'On'], ['auto', 'Auto'], ['off', 'Off']], 'on');
+      addSelect(context, 'Prompt batch', 'batch', data.batch, [['safe', 'Safe'], ['medium', 'Medium'], ['wide', 'Wide']], 'safe');
+      addSelect(context, 'Chats at once', 'slots', data.slots, [['1', 'One'], ['2', 'Two']], '1');
+      var sampling = addGroup(form, 'Sampling', 'Reply style, length, reasoning, the system prompt, repeat penalty, minimum probability, and seed apply at the next load.');
+      addSelect(sampling, 'Reply style', 'sampling', data.sampling, [['model', 'Model'], ['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], 'model');
+      addSelect(sampling, 'Reply length', 'max_tokens', data.max_tokens, [['-1', 'Unlimited'], ['512', '512'], ['2048', '2048'], ['8192', '8192']], '-1');
+      addSelect(sampling, 'Reasoning', 'reasoning', data.reasoning, [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], 'auto');
+      addSelect(sampling, 'System prompt', 'system_prompt', data.system_prompt, [['home', 'Home'], ['helpful', 'Helpful'], ['concise', 'Concise'], ['none', 'None']], 'home');
+      addSelect(sampling, 'Repeat penalty', 'repeat_penalty', data.repeat_penalty || 'off', [['off', 'Off'], ['light', 'Light'], ['medium', 'Medium'], ['strong', 'Strong']], 'off');
+      addSelect(sampling, 'Minimum probability', 'min_p', data.min_p || 'off', [['off', 'Off'], ['0.05', '0.05'], ['0.10', '0.10']], 'off');
+      addSelect(sampling, 'Seed', 'seed', data.seed || 'random', [['random', 'Random'], ['42', '42'], ['7', '7'], ['1234', '1234']], 'random');
+      var chat = addGroup(form, 'Chat', 'Search, the clock, file tools, and how many messages the page sends apply to the next question.');
+      addCheck(chat, 'Web search', 'web_search', data.web_search, true);
+      addCheck(chat, 'Date and time', 'datetime', data.datetime, true);
+      fileToolsOn = !!data.tools;
+      addCheck(chat, 'File tools, projects, and notes', 'tools', data.tools, true);
+      addSelect(chat, 'Messages to send', 'remember', data.remember || 16, [['8', '8'], ['16', '16'], ['32', '32']], '16');
+      addSelect(chat, 'Search results', 'search_hits', data.search_hits || 5, [['3', '3'], ['5', '5'], ['8', '8']], '5');
+      addSelect(chat, 'Warn above', 'scratch_limit_gib', data.scratch_limit_gib || 2, [['1', '1 GB'], ['2', '2 GB'], ['5', '5 GB'], ['10', '10 GB'], ['20', '20 GB']], '2');
+      var agent = addGroup(form, 'Agent', data.agent_note || 'The console keeps one model on the GPU. A hand off restarts the app onto the worker.');
+      addSelect(agent, 'Agent mode', 'agent', data.agent || 'off', [['off', 'Off'], ['plan', 'Plan'], ['handoff', 'Hand off']], 'off');
+      addModelSelect(agent, 'Coordinator', 'coordinator', data.coordinator || '', models);
+      addModelSelect(agent, 'Worker', 'worker', data.worker || '', models);
+      addSelect(agent, 'Plan length', 'plan_tokens', data.plan_tokens || 256, [['128', 'Short'], ['256', 'Medium'], ['512', 'Long']], '256');
+      var sound = addGroup(form, 'Sound and storage', 'Sounds play on the TV. Downloads go to the folder below.');
+      addCheck(sound, 'Sounds', 'sounds', data.sounds, true);
+      addSelect(sound, 'Save downloads to', 'download_dir', data.download_dir, [
+        ['/data/ArtemisLM/models', 'Internal'],
+        ['/mnt/ext0/ArtemisLM/models', 'M.2'],
+        ['/mnt/usb0/ArtemisLM/models', 'USB 0'],
+        ['/mnt/usb1/ArtemisLM/models', 'USB 1']
+      ], '/data/ArtemisLM/models');
       var upd = document.createElement('div');
       upd.className = 'rowbtns';
       var line = document.createElement('div');
@@ -1553,7 +1647,7 @@
       };
       upd.appendChild(line);
       upd.appendChild(go);
-      form.appendChild(upd);
+      sound.appendChild(upd);
       paintUpdate();
       });
     });

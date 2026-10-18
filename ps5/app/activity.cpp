@@ -228,7 +228,7 @@ void ask_self(int port, const std::string & text, bool decision, bool clock_on, 
             if (agent == "plan" || agent == "handoff") {
                 plan = coordinator_plan(port, text, plan_tokens);
             }
-            if (facts.used_clock || facts.used_search || facts.used_calc || !plan.empty()) {
+            if (facts.used_clock || facts.used_search || facts.used_calc || facts.used_ref || !plan.empty()) {
                 std::string note = "You are ArtemisLM PS5. Answer from the notes below. "
                                    "Do not invent a rate, a price or a date. If the search failed, say so.";
                 if (facts.used_clock) {
@@ -236,6 +236,9 @@ void ask_self(int port, const std::string & text, bool decision, bool clock_on, 
                 }
                 if (facts.used_calc) {
                     note += "\nCalculation: " + facts.calc;
+                }
+                if (facts.used_ref) {
+                    note += "\nReference: " + facts.ref;
                 }
                 if (facts.used_search) {
                     note += "\nWeb search (web_search):\n" + facts.search;

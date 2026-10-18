@@ -56,6 +56,8 @@ struct LiveFacts {
     std::string search;
     bool used_calc = false;
     std::string calc;
+    bool used_ref = false;
+    std::string ref;
 };
 
 LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on, int search_hits = 5);

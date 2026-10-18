@@ -129,8 +129,11 @@ Program, Install, Edit mcp.json. Use the console's address:
 }
 ```
 
-The model in LM Studio then has four tools: `artemis_status`, `artemis_models`,
-`artemis_ask`, and `artemis_load`. Ask sends the question to port 47281. When
+The model in LM Studio then has five tools: `artemis_status`, `artemis_models`,
+`artemis_ask`, `artemis_load`, and `artemis_reference`. The reference tool converts
+units, does calendar dates, and looks up constants, elements, HTTP statuses, and
+short text encodings stored on the console. It needs 0.12.0 or later on the console.
+Ask sends the question to port 47281. When
 Agent mode on the console is Plan or Hand off, the script writes a short plan
 first and then the answer, both on the loaded model. Hand off does not restart
 from this script. Load restarts the app onto another file, so the next ask

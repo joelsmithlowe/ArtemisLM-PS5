@@ -21,8 +21,10 @@ already share, and the same kind of folder on an M.2 or USB drive. A copy found 
 where it is, or be moved home and the old file removed.
 
 The chat reads the console clock, searches the web, and works out a plain sum before it asks the
-model. A research question also reads the text of one page. Settings on the television and on the
+model. A conversion, a date, a constant, an element, or a status code comes from a table kept in
+the app. A research question also reads the text of one page. Settings on the television and on the
 phone page cover context, flash attention, the prompt batch, and how much spare memory to keep.
+The current setup is written in one line, and a choice that leaves the measured default is marked.
 Measured is the spare this console was tested with. Agent mode names a coordinator and a worker.
 The console keeps one model on the GPU. Plan writes a short plan and then the answer on the loaded
 model. Hand off, from the page, restarts onto the worker after the plan. LM Studio can call the
@@ -55,7 +57,11 @@ An OpenAI client still uses port 47281.
   asked, and the reply as it is written. Square sends a demo and Triangle opens a keyboard, so the
   console can be tried from the couch.
 - **It watches the console.** A Console page charts temperature, power, GPU and CPU load over the
-  last two minutes or the last hour, beside a table of every reading.
+  last two minutes or the last hour, beside the readings now. Home shows how fast the model is
+  running, and how full its memory and context are.
+- **It keeps a few tables.** Unit conversion, calendar dates, constants, elements, HTTP statuses,
+  and short text codes stay in the app. The library port answers `POST /reference`. LM Studio can
+  call the same table.
 - **It picks what fits.** The planner reads each GGUF and gives it the longest context and best cache
   that fit the memory free. A Suggested list holds models measured on the console, and the app
   downloads from Hugging Face by itself, to internal storage, the M.2 drive or a USB drive.
@@ -113,6 +119,8 @@ You need a PS5 on firmware 7.00 to 13.60, jailbroken, with these payloads loaded
 4. Load it. Once Home says Ready, the same address is the chat, or point your OpenAI or
    Anthropic client at it. Library and Settings on that page use port 47282 on the same console.
    A question about today uses the console clock, then the web search. A plain sum is worked out first.
+   A conversion, a calendar date, a physical constant, an element, or an HTTP status comes from a
+   small table kept in the app. That table is not downloaded and it is not stored under `/data`.
    With file tools on, the browser chat can save a project in `/data/ArtemisLM/projects`
    (a Node server, a static page, or a Python program), review the files, and leave them
    to copy off with FTP. The console does not start Node or Python. The same switch lists

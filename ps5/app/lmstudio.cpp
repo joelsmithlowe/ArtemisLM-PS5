@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "lmstudio.hpp"
 
+#include "reference.hpp"
 #include "stats.hpp"
 #include "version.hpp"
 
@@ -138,6 +139,28 @@ nlohmann::json tool_list() {
             { "required", { "path" } },
         } },
     });
+    tools.push_back({
+        { "name", "artemis_reference" },
+        { "description", "Look up a small table stored on the PlayStation. No download. tool is convert, calendar, lookup, text, or note. convert needs value, from, and to. calendar op is weekday, between, or add. lookup kind is constant, element, http, or prefix. text op is base64, unbase64, hex, sha256, or count." },
+        { "inputSchema", {
+            { "type", "object" },
+            { "properties", {
+                { "tool", text("convert, calendar, lookup, text, or note.") },
+                { "value", { { "type", "number" }, { "description", "The number to convert." } } },
+                { "from", text("Unit to convert from, such as km or celsius.") },
+                { "to", text("Unit to convert to, such as miles or fahrenheit.") },
+                { "op", text("calendar: weekday, between, or add. text: base64, unbase64, hex, sha256, or count.") },
+                { "date", text("YYYY-MM-DD, or a date such as 18 October 2026.") },
+                { "end", text("The second date for calendar between.") },
+                { "days", { { "type", "integer" }, { "description", "Days to add. Negative goes backward." } } },
+                { "kind", text("lookup kind: constant, element, http, or prefix.") },
+                { "name", text("Constant, element, or SI prefix. pi, iron, Fe, or nano.") },
+                { "code", { { "type", "integer" }, { "description", "HTTP status code, such as 404." } } },
+                { "text", text("Text to encode, or the question for tool note.") },
+            } },
+            { "required", { "tool" } },
+        } },
+    });
     return tools;
 }
 
@@ -202,9 +225,27 @@ AskBuilt build_ask(const nlohmann::json & in, const Settings & settings) {
     return ask;
 }
 
+void attach_reference(nlohmann::json * messages, const std::string & user) {
+    const std::string note = reference_note(user);
+    if (note.empty() || !messages) {
+        return;
+    }
+    const std::string line = "Reference:\n" + note + "\nUse this figure. Do not replace it.";
+    if (!messages->empty() && (*messages)[0].is_object() && (*messages)[0].value("role", "") == "system" &&
+        (*messages)[0].contains("content") && (*messages)[0]["content"].is_string()) {
+        (*messages)[0]["content"] = (*messages)[0]["content"].get<std::string>() + "\n\n" + line;
+    } else {
+        nlohmann::json note = nlohmann::json::object();
+        note["role"] = "system";
+        note["content"] = "You are ArtemisLM PS5.\n" + line;
+        messages->insert(messages->begin(), note);
+    }
+}
+
 AskResult run_ask(int port, const AskBuilt & ask) {
     AskResult got;
     nlohmann::json messages = ask.messages;
+    attach_reference(&messages, ask.user_text);
     if (ask.want_plan && !ask.user_text.empty()) {
         nlohmann::json plan;
         plan["model"] = "artemis";
@@ -294,7 +335,8 @@ McpReply mcp_handle(const std::string & body, McpTool tool) {
         nlohmann::json args = params.contains("arguments") && params["arguments"].is_object() ? params["arguments"] : nlohmann::json::object();
         std::string error;
         std::string text;
-        const bool known = name == "artemis_status" || name == "artemis_models" || name == "artemis_ask" || name == "artemis_load";
+        const bool known = name == "artemis_status" || name == "artemis_models" || name == "artemis_ask" ||
+                       name == "artemis_load" || name == "artemis_reference";
         if (!known) {
             error = "That tool is not on this console";
         } else if (!tool) {

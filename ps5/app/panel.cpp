@@ -10,6 +10,7 @@
 #include "files.hpp"
 #include "memory.hpp"
 #include "projects.hpp"
+#include "reference.hpp"
 #include "model_plan.hpp"
 #include "search_parse.hpp"
 #include "settings.hpp"
@@ -661,6 +662,8 @@ void handle(int fd, const std::string & method, const std::string & path, const 
             s = load_settings(kSettingsPath);
         }
         out = s.tools ? files_call(files_roots(), body) : std::string("{\"error\":\"File tools are off\"}");
+    } else if (method == "POST" && route == "/reference") {
+        out = reference_call(body);
     } else if (method == "POST" && route == "/load") {
         out = act_load(body);
     } else if (method == "POST" && route == "/unload") {
@@ -833,6 +836,23 @@ std::string lmstudio_tool(const std::string & name, const nlohmann::json & args,
             text += "\n\nHand off restarts the app from the phone page. This answer stays on the loaded model.";
         }
         return text;
+    }
+    if (name == "artemis_reference") {
+        const std::string raw = reference_call(args.dump());
+        const nlohmann::json got = nlohmann::json::parse(raw, nullptr, false);
+        if (!got.is_object()) {
+            if (error) {
+                *error = "The reference table did not answer";
+            }
+            return {};
+        }
+        if (got.contains("error") && got["error"].is_string()) {
+            if (error) {
+                *error = got["error"].get<std::string>();
+            }
+            return {};
+        }
+        return got.value("text", "");
     }
     if (name == "artemis_load") {
         const std::string raw = act_load(nlohmann::json{ { "path", args.value("path", "") } }.dump());

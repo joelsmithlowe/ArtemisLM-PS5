@@ -13,6 +13,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "search_parse.hpp"
 #include "fetch.hpp"
+#include "reference.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -391,6 +392,8 @@ LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on, i
             f.used_calc = true;
             f.calc = shown;
         }
+        f.ref = reference_note(question);
+        f.used_ref = !f.ref.empty();
         return f;
     }
     const bool search = kind == LiveKind::search;
@@ -425,6 +428,8 @@ LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on, i
             f.search = "no results";
         }
     }
+    f.ref = reference_note(question);
+    f.used_ref = !f.ref.empty();
     return f;
 }
 

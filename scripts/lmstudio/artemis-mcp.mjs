@@ -7,6 +7,7 @@
 //
 // Works with a console on 0.10.0. A later build also serves MCP itself at
 // http://<PS5>:47282/mcp, which LM Studio can use without this script.
+// artemis_reference calls POST /reference, so that one tool needs 0.12.0 or later.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -116,6 +117,28 @@ const tools = [
       properties: { path: { type: 'string', description: 'Absolute path of a .gguf from artemis_models.' } },
       required: ['path']
     }
+  },
+  {
+    name: 'artemis_reference',
+    description: 'Look up a small table stored on the PlayStation. No download. tool is convert, calendar, lookup, text, or note. convert needs value, from, and to. calendar op is weekday, between, or add. lookup kind is constant, element, http, or prefix. text op is base64, unbase64, hex, sha256, or count.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool: { type: 'string', description: 'convert, calendar, lookup, text, or note.' },
+        value: { type: 'number', description: 'The number to convert.' },
+        from: { type: 'string', description: 'Unit to convert from, such as km or celsius.' },
+        to: { type: 'string', description: 'Unit to convert to, such as miles or fahrenheit.' },
+        op: { type: 'string', description: 'calendar: weekday, between, or add. text: base64, unbase64, hex, sha256, or count.' },
+        date: { type: 'string', description: 'YYYY-MM-DD, or a date such as 18 October 2026.' },
+        end: { type: 'string', description: 'The second date for calendar between.' },
+        days: { type: 'integer', description: 'Days to add. Negative goes backward.' },
+        kind: { type: 'string', description: 'lookup kind: constant, element, http, or prefix.' },
+        name: { type: 'string', description: 'Constant, element, or SI prefix. pi, iron, Fe, or nano.' },
+        code: { type: 'integer', description: 'HTTP status code, such as 404.' },
+        text: { type: 'string', description: 'Text to encode, or the question for tool note.' }
+      },
+      required: ['tool']
+    }
   }
 ];
 
@@ -176,9 +199,23 @@ function messagesFrom(args) {
   return { messages, user };
 }
 
+async function referenceText(args) {
+  const got = await call(libraryPort, 'POST', '/reference', args || {}, 10000);
+  const err = got.json && typeof got.json.error === 'string' ? got.json.error : '';
+  if (err) return { text: '', error: err };
+  if (got.json && typeof got.json.text === 'string') return { text: got.json.text, error: '' };
+  return { text: '', error: got.error || 'The console has no reference table.' };
+}
+
 async function askText(args) {
   const built = messagesFrom(args || {});
   if (!built.messages.length || !built.user) return { text: '', error: 'Say what to ask.' };
+  const noted = await referenceText({ tool: 'note', text: built.user });
+  if (noted.text && noted.text.indexOf('Nothing in this table') !== 0) {
+    const line = '\n\nReference:\n' + noted.text + '\nUse this figure. Do not replace it.';
+    if (built.messages[0].role === 'system') built.messages[0].content += line;
+    else built.messages.unshift({ role: 'system', content: 'You are ArtemisLM PS5.' + line });
+  }
   let wantPlan = args.plan === true;
   let planTokens = 256;
   let agent = 'off';
@@ -252,6 +289,7 @@ async function runTool(name, args) {
   if (name === 'artemis_models') return modelsText();
   if (name === 'artemis_ask') return askText(args || {});
   if (name === 'artemis_load') return loadText(args || {});
+  if (name === 'artemis_reference') return referenceText(args || {});
   return { text: '', error: 'That tool is not on this console.' };
 }
 

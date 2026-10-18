@@ -6,6 +6,8 @@
 // the console's temperature and power sit in the status line, where a car
 // shows the weather. Colour means state only: blue is what is active or
 // chosen, green a model that serves, red a fault. Everything else is grey.
+// A setting that leaves the measured default is blue too, on the row and as
+// a dot beside its category, so a change is visible without opening it.
 //
 // Sound works the same way: one sound for each kind of thing, on every page,
 // always at the same pitch, so the ear learns them (PocketVibe's set, in
@@ -248,6 +250,13 @@ void plot(gfx::DrawList & l, const std::vector<float> & v, const Rect & g, Color
     }
     const float step = g.w / 119.0f;
     const auto at = [&](float x) { return g.y + g.h - tween::clamp01((x - lo) / (hi - lo)) * g.h; };
+    const float floor = g.y + g.h;
+    // A soft fill under the line, one stroke per sample. No texture.
+    for (size_t age = 0; age < v.size(); ++age) {
+        const float x = g.x + g.w - (float) age * step;
+        const float y = at(v[v.size() - 1 - age]);
+        l.line(x, y, x, floor, std::max(1.6f, step), c.with_alpha(0.22f));
+    }
     float lx = 0, ly = 0;
     for (size_t age = 0; age < v.size(); ++age) {
         const float x = g.x + g.w - (float) age * step;
@@ -259,6 +268,17 @@ void plot(gfx::DrawList & l, const std::vector<float> & v, const Rect & g, Color
         ly = y;
     }
     l.circle(g.x + g.w, at(v.back()), 5, c);
+}
+
+// A 270 degree dial, gap at the bottom. Angles are clockwise from 12 o'clock.
+// 85% and above is blue: the instrument is working hard.
+void gauge(gfx::DrawList & l, float cx, float cy, float share, Color c) {
+    constexpr float a0 = 3.927f, sweep = 4.712f;
+    l.arc(cx, cy, 12, 3.2f, a0, sweep, kHair, false);
+    const float s = tween::clamp01(share);
+    if (s > 0.012f) {
+        l.arc(cx, cy, 12, 3.2f, a0, sweep * s, s > 0.85f ? kBlue : c, true);
+    }
 }
 
 void trace(gfx::DrawList & l, const std::vector<float> & v, const Rect & g, Color c) {
@@ -502,6 +522,101 @@ void flip_toggle(Settings & s, Setting id) {
         case Setting::scan_ps5lm: s.scan_ps5lm = !s.scan_ps5lm; break;
         case Setting::scan_usb: s.scan_usb = !s.scan_usb; break;
         default: break;
+    }
+}
+
+// True when the row is still on the measured default. Actions have no default
+// to leave. Choosing which model to load is the point of that row.
+bool usual_choice(const Settings & s, Setting id) {
+    switch (id) {
+        case Setting::auto_load: return !s.auto_load;
+        case Setting::default_model: return true;
+        case Setting::ctx_cap: return s.ctx_cap == 65536;
+        case Setting::kv_type: return s.kv_type == "auto";
+        case Setting::flash_attn: return s.flash_attn == "on" || s.flash_attn.empty();
+        case Setting::batch: return s.batch == "safe" || s.batch.empty();
+        case Setting::slots: return s.slots <= 1;
+        case Setting::sampling: return s.sampling == "model" || s.sampling.empty();
+        case Setting::max_tokens: return s.max_tokens < 0;
+        case Setting::reasoning: return s.reasoning == "auto" || s.reasoning.empty();
+        case Setting::system_prompt: return s.system_prompt == "home" || s.system_prompt.empty();
+        case Setting::sounds: return s.sounds;
+        case Setting::tools: return s.tools;
+        case Setting::web_search: return s.web_search;
+        case Setting::datetime: return s.datetime;
+        case Setting::scratch_limit: return s.scratch_limit_gib == 2;
+        case Setting::clear_scratch: return true;
+        case Setting::download_dir: return s.download_dir == "/data/ArtemisLM/models";
+        case Setting::scan_ps5lm: return s.scan_ps5lm;
+        case Setting::scan_usb: return s.scan_usb;
+        case Setting::migrate: return s.migrate == "ask" || s.migrate.empty();
+        case Setting::move_now: return true;
+        case Setting::memory: return s.memory == "measured" || s.memory.empty();
+        case Setting::app_update: return true;
+        case Setting::agent: return s.agent == "off" || s.agent.empty();
+        case Setting::coordinator: return true;
+        case Setting::worker: return true;
+        case Setting::plan_tokens: return s.plan_tokens == 256;
+        case Setting::repeat_penalty: return s.repeat_penalty == "off" || s.repeat_penalty.empty();
+        case Setting::min_p: return s.min_p == "off" || s.min_p.empty();
+        case Setting::seed: return s.seed == "random" || s.seed.empty();
+        case Setting::remember: return s.remember == 16;
+        case Setting::search_hits: return s.search_hits == 5;
+    }
+    return true;
+}
+
+bool category_changed(const Settings & s, int index) {
+    if (index < 0 || index >= kCategoryCount) {
+        return false;
+    }
+    const SettingCategory & c = kCategories[index];
+    for (int i = 0; i < c.count; ++i) {
+        if (!usual_choice(s, c.rows[i].id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The same sentence the phone shows: what the console will do on the next load.
+std::string setup_line(const Settings & s) {
+    const char * mem = s.memory == "tight" ? "Tight spare" : s.memory == "roomy" ? "More spare" : "Measured spare";
+    const char * fa = s.flash_attn == "off" ? "flash attention off"
+                      : s.flash_attn == "auto" ? "flash attention automatic" : "flash attention on";
+    const char * batch = s.batch == "wide" ? "a wide prompt batch" : s.batch == "medium" ? "a medium prompt batch"
+                                                                                          : "a safe prompt batch";
+    const char * chats = s.slots >= 2 ? "two chats" : "one chat";
+    std::string line = std::string(mem) + ". " + fa + ", " + batch + ", " + chats + ".";
+    if (s.agent == "plan") {
+        line += " Agent writes a plan first.";
+    } else if (s.agent == "handoff") {
+        line += " Agent can hand off, which restarts the app.";
+    }
+    return line;
+}
+
+// The fourth home readout: agent when it is on, otherwise the first GPU
+// choice that left the measured path.
+void running_note(const Settings & s, std::string * label, std::string * value) {
+    if (s.agent == "plan") {
+        *label = "Agent";
+        *value = "Plan first";
+    } else if (s.agent == "handoff") {
+        *label = "Agent";
+        *value = "Hand off";
+    } else if (s.batch == "wide" || s.batch == "medium") {
+        *label = "Batch";
+        *value = s.batch == "wide" ? "Wide" : "Medium";
+    } else if (s.memory == "tight" || s.memory == "roomy") {
+        *label = "Fit";
+        *value = s.memory == "tight" ? "Tight" : "More spare";
+    } else if (s.flash_attn == "off" || s.flash_attn == "auto") {
+        *label = "Attention";
+        *value = s.flash_attn == "off" ? "Off" : "Auto";
+    } else {
+        *label = "Agent";
+        *value = "Off";
     }
 }
 
@@ -1568,11 +1683,28 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
         put(l, f.regular, "The page is open", kLeft, 340, 64, kInk);
         put(l, f.regular, "Download a model in Library, or add a folder in Settings.", kLeft, 400, 24, kInk2);
         put(l, f.regular, format("%.0f models on this PS5", (double) live_.models.size()), kLeft, 444, 24, kInk3);
-        if (!live_.address.empty()) {
-            put(l, f.regular, "On your network", kLeft, 540, 22, kInk3);
-            put(l, f.regular, "http://" + live_.address, kLeft, 586, 32, kInk2);
+        const auto setup = wrap(f.regular, setup_line(settings_), 22, 900);
+        for (size_t i = 0; i < setup.size() && i < 2; ++i) {
+            put(l, f.regular, setup[i], kLeft, 492.0f + 28.0f * (float) i, 22, kInk2);
         }
-        draw_flight(l, kLeft + 280, 800, clock_);
+        if (!live_.address.empty()) {
+            put(l, f.regular, "On your network", kLeft, 572, 22, kInk3);
+            put(l, f.regular, "http://" + live_.address, kLeft, 618, 32, kInk2);
+        }
+        std::string room;
+        if (live_.pool_gib > 0) {
+            room = format("%.1f", live_.free_gib) + " GB free in memory";
+        }
+        if (!live_.drives.empty() && live_.drives[0].total > 0) {
+            if (!room.empty()) {
+                room += "    ";
+            }
+            room += format("%.0f", live_.drives[0].free) + " GB free on " + live_.drives[0].name;
+        }
+        if (!room.empty()) {
+            put(l, f.regular, f.regular.font->fit(room, 22, 900), kLeft, 676, 22, kInk3);
+        }
+        draw_flight(l, kLeft + 280, 820, clock_);
     } else {
         std::string name, build;
         split_name(live_.model_label, &name, &build);
@@ -1586,7 +1718,13 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
         if (live_.model_gib > 0) {
             detail += (detail.empty() ? "" : "    ") + gb(live_.model_gib);
         }
-        put(l, f.regular, detail, kLeft, 372, 24, kInk3);
+        if (!live_.kv_type.empty()) {
+            detail += (detail.empty() ? "" : "    ") + live_.kv_type + " cache";
+        }
+        if (settings_.slots >= 2) {
+            detail += (detail.empty() ? "" : "    ") + std::string("two chats");
+        }
+        put(l, f.regular, f.regular.font->fit(detail, 24, 900), kLeft, 372, 24, kInk3);
 
         // The state, as a car shows its gear: one word, coloured only when it matters.
         const char * word = live_.state == ServerState::loading ? "Loading"
@@ -1686,6 +1824,25 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
         put(l, f.regular, thousands(live_.ctx_used) + " of " + format("%.0fk", live_.ctx / 1024.0), kLeft + 860, my, 22, kInk,
              gfx::Align::right);
         meter(l, kLeft + 460, my + 16, 400, live_.ctx > 0 ? (float) live_.ctx_used / (float) live_.ctx : 0, kInk.with_alpha(0.8f));
+
+        // GPU, CPU, the last prompt, and either the agent or the first GPU
+        // choice that left the measured path.
+        const float sy = 918, gap = 16, colw = (860.0f - 3 * gap) / 4.0f;
+        const std::string prompt = live_.prompt_tps > 0.05f ? format("%.0f /s", live_.prompt_tps) : std::string(kDash);
+        std::string note_l, note_v;
+        running_note(settings_, &note_l, &note_v);
+        const bool note_changed = note_l != "Agent" || note_v != "Off";
+        const std::string labels[] = { "GPU", "CPU", "Prompt", note_l };
+        const std::string values[] = { format("%.0f%%", 100.0 * live_.gpu_busy), format("%.0f%%", 100.0 * live_.cpu_use), prompt, note_v };
+        const float shares[] = { live_.gpu_busy, live_.cpu_use, -1.0f, -1.0f };
+        for (int i = 0; i < 4; ++i) {
+            const float x = kLeft + (colw + gap) * (float) i;
+            put(l, f.regular, labels[i], x, sy, 18, kInk3);
+            put(l, f.regular, values[i], x + colw, sy, 18, i == 3 && note_changed ? kBlue : kInk, gfx::Align::right);
+            if (shares[i] >= 0) {
+                meter(l, x, sy + 8, colw, shares[i], shares[i] > 0.85f ? kBlue : kInk.with_alpha(0.8f));
+            }
+        }
     }
 
     // Right: what the network asks of it, as it happens. A single panel, as a
@@ -2029,10 +2186,20 @@ void Dashboard::draw_api(gfx::DrawList & l) const {
     const Rect p{ 1000, 236, kRight - 1000, 688 };
     l.rounded_rect(p, 24, kSurface);
     put(l, f.regular, loaded ? "Try it" : "On this address", p.x + 48, p.y + 68, 24, kInk2);
+    if (loaded) {
+        put(l, f.regular, thousands(live_.served) + " answered", p.x + p.w - 48, p.y + 68, 20, kInk3, gfx::Align::right);
+    }
+    put(l, f.regular,
+        f.regular.font->fit("Port " + std::to_string(kLibraryPort) + "    POST /v1/agent    POST /reference", 20, p.w - 96),
+        p.x + 48, p.y + 104, 20, kInk3);
     if (!loaded) {
-        put(l, f.regular, "The page is open with no model.", p.x + 48, p.y + 130, 22, kInk);
-        put(l, f.regular, "Library can download one.", p.x + 48, p.y + 172, 22, kInk2);
-        put(l, f.regular, "Settings can add a folder.", p.x + 48, p.y + 214, 22, kInk2);
+        put(l, f.regular, "The page is open with no model.", p.x + 48, p.y + 156, 22, kInk);
+        put(l, f.regular, "Library can download one.", p.x + 48, p.y + 198, 22, kInk2);
+        put(l, f.regular, "Settings can add a folder.", p.x + 48, p.y + 240, 22, kInk2);
+        const auto setup = wrap(f.regular, setup_line(settings_), 20, p.w - 96);
+        for (size_t i = 0; i < setup.size() && i < 3; ++i) {
+            put(l, f.regular, setup[i], p.x + 48, p.y + 300 + 28.0f * (float) i, 20, kInk2);
+        }
     }
     if (loaded) {
         std::vector<std::string> code;
@@ -2044,7 +2211,7 @@ void Dashboard::draw_api(gfx::DrawList & l) const {
             code = { "curl " + base + "/v1/chat/completions \\", "  -H 'Content-Type: application/json' \\", "  -d '{", "    \"messages\": [",
                      "      {\"role\": \"user\",", "       \"content\": \"Hello from my PS5\"}", "    ]", "  }'" };
         }
-        float cy = p.y + 130;
+        float cy = p.y + 150;
         for (const auto & line : code) {
             put(l, f.mono, f.mono.font->fit(line, 21, p.w - 96), p.x + 48, cy, 21, kInk);
             cy += 34;
@@ -2132,6 +2299,22 @@ void Dashboard::draw_console(gfx::DrawList & l) const {
     const Rect p{ 1264, kListY, kRight - 1264, 926 - kListY };
     l.rounded_rect(p, 24, kSurface);
     put(l, f.regular, "Now", p.x + 40, p.y + 52, 22, kInk2);
+    // 85°C is only the word on this page. It is not a shutdown line.
+    std::string feel = "Sensors off";
+    Color feel_c = kInk3;
+    if (live_.soc_temp > -100) {
+        const bool hot = live_.soc_temp >= 85.0f;
+        feel = hot ? "Hot" : live_.soc_temp >= 70.0f ? "Warm" : "Cool";
+        if (live_.state == ServerState::loading) {
+            feel += ", loading";
+        } else if (live_.state == ServerState::generating || live_.gpu_busy >= 0.55f) {
+            feel += ", working";
+        } else {
+            feel += ", idle";
+        }
+        feel_c = hot ? kRed : kInk2;
+    }
+    put(l, f.regular, feel, p.x + p.w - 40, p.y + 52, 20, feel_c, gfx::Align::right);
     const auto deg = [&](float t) { return t > -100 ? format("%.0f\xC2\xB0" "C", t) : std::string(kDash); };
     float soc_lo = 1000, soc_hi = -1000;
     for (const auto & [name, t] : live_.temps) {
@@ -2167,6 +2350,19 @@ void Dashboard::draw_console(gfx::DrawList & l) const {
         }
         put(l, f.regular, name, p.x + 40, y, 20, kInk2);
         put(l, f.regular, value, p.x + p.w - 40, y, 20, kInk, gfx::Align::right);
+        float share = -1;
+        if (name == "Fan" && live_.fan >= 0) {
+            share = live_.fan;
+        } else if (name == "GPU busy") {
+            share = live_.gpu_busy;
+        } else if (name == "CPU use") {
+            share = live_.cpu_use;
+        } else if (name == "Memory" && live_.pool_gib > 0) {
+            share = (float) ((live_.pool_gib - live_.free_gib) / live_.pool_gib);
+        }
+        if (share >= 0) {
+            gauge(l, p.x + 196, y - 6, share, kInk);
+        }
         y += 38;
     }
 }
@@ -2175,7 +2371,12 @@ void Dashboard::draw_console(gfx::DrawList & l) const {
 
 void Dashboard::draw_settings(gfx::DrawList & l) const {
     const ui::Fonts & f = fonts_;
-    put(l, f.semibold, "Settings", kLeft, kTitleY, 44, kInk);
+    const float title_w = put(l, f.semibold, "Settings", kLeft, kTitleY, 44, kInk);
+    const float room = kRight - (kLeft + title_w + 48);
+    if (room > 120) {
+        put(l, f.regular, f.regular.font->fit(setup_line(settings_), 22, room), kRight, kTitleY - 6, 22, kInk2,
+            gfx::Align::right);
+    }
     const bool rows = in_rows_ && setting_category_ != kDiagnostics && setting_category_ != kCredits;
     l.rounded_rect({ rows ? kListX : kLeft - 20, rows_y_.value, rows ? kRight - kListX : kRailW, rows ? kRowH : kRailH }, 14,
                    in_rows_ && setting_category_ == kDiagnostics ? kSurface : kRaised);
@@ -2185,7 +2386,10 @@ void Dashboard::draw_settings(gfx::DrawList & l) const {
         if (on) {
             l.rounded_rect({ kLeft - 20, y + 16, 4, kRailH - 32 }, 2, kBlue);
         }
-        put(l, f.regular, kCategories[i].name, kLeft, y + 42, 26, on ? kInk : kInk2);
+        put(l, f.regular, f.regular.font->fit(kCategories[i].name, 26, kRailW - 72), kLeft, y + 42, 26, on ? kInk : kInk2);
+        if (category_changed(settings_, i)) {
+            l.circle(kLeft + kRailW - 36, y + 34, 4, kBlue);
+        }
     }
     if (setting_category_ == kDiagnostics) {
         draw_logs(l, { kListX, kListY, kRight - kListX, kDockY - 40 - kListY });
@@ -2199,19 +2403,20 @@ void Dashboard::draw_settings(gfx::DrawList & l) const {
     for (int i = 0; i < c.count; ++i) {
         const SettingRow & r = c.rows[i];
         const float y = kListY + kRowPitch * (float) i;
+        const bool focus = in_rows_ && i == setting_row_;
+        const bool changed = !usual_choice(settings_, r.id);
         put(l, f.regular, r.label, kListX + 28, y + 36, 26, kInk);
-        put(l, f.regular, r.help, kListX + 28, y + 66, 20, kInk3);
+        put(l, f.regular, r.help, kListX + 28, y + 66, 20, focus ? kInk2 : kInk3);
         const float cy = y + kRowH * 0.5f;
         if (is_toggle(r.id)) {
             toggle_switch(l, kRight - 28, cy, toggle_value(settings_, r.id));
         } else if (!is_action(r.id)) {
-            const bool focus = in_rows_ && i == setting_row_;
-            const Color c = focus ? kInk : kInk2;
-            put(l, f.regular, setting_text(settings_, r.id, live_.models, live_.drives), kRight - 68, y + 50, 24, c,
+            const Color value_c = changed ? kBlue : (focus ? kInk : kInk2);
+            put(l, f.regular, setting_text(settings_, r.id, live_.models, live_.drives), kRight - 68, y + 50, 24, value_c,
                  gfx::Align::right);
             // A chevron down: X opens a list of the choices.
-            l.line(kRight - 44, cy - 4, kRight - 36, cy + 4, 2.4f, c);
-            l.line(kRight - 36, cy + 4, kRight - 28, cy - 4, 2.4f, c);
+            l.line(kRight - 44, cy - 4, kRight - 36, cy + 4, 2.4f, value_c);
+            l.line(kRight - 36, cy + 4, kRight - 28, cy - 4, 2.4f, value_c);
         } else if (r.id == Setting::clear_scratch && live_.scratch_gib > 0) {
             put(l, f.regular, format("%.1f GB in it", live_.scratch_gib), kRight - 28, y + 50, 22, kInk2,
                  gfx::Align::right);

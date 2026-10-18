@@ -1,5 +1,5 @@
 // Host check for the LM Studio ask builder and the MCP envelope.
-//   c++ -std=c++20 -I <llama vendor> ps5/app/lmstudio_test.cpp ps5/app/lmstudio.cpp -o /tmp/lmstudio_test
+//   c++ -std=c++20 -I <llama vendor> ps5/app/lmstudio_test.cpp ps5/app/lmstudio.cpp ps5/app/reference.cpp -o /tmp/lmstudio_test
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "lmstudio.hpp"
@@ -82,11 +82,12 @@ int main() {
     int names = 0;
     for (const auto & tool : list_json["result"]["tools"]) {
         const std::string name = tool.value("name", "");
-        if (name == "artemis_status" || name == "artemis_models" || name == "artemis_ask" || name == "artemis_load") {
+        if (name == "artemis_status" || name == "artemis_models" || name == "artemis_ask" || name == "artemis_load" ||
+            name == "artemis_reference") {
             ++names;
         }
     }
-    expect(names == 4, "four tools");
+    expect(names == 5, "five tools");
 
     const ps5lm::McpReply call = ps5lm::mcp_handle(
         R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"artemis_ask","arguments":{"prompt":"Hi"}}})",
@@ -104,6 +105,14 @@ int main() {
         R"({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"shell"}})", tool_echo);
     const nlohmann::json unknown_json = nlohmann::json::parse(unknown.body, nullptr, false);
     expect(unknown_json["result"]["isError"] == true, "unknown tool");
+
+    const ps5lm::McpReply ref = ps5lm::mcp_handle(
+        R"({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"artemis_reference","arguments":{"tool":"note","text":"5 km to miles"}}})",
+        tool_echo);
+    const nlohmann::json ref_json = nlohmann::json::parse(ref.body, nullptr, false);
+    expect(ref_json["result"]["isError"] == false &&
+               ref_json["result"]["content"][0]["text"].get<std::string>().rfind("artemis_reference:", 0) == 0,
+           "reference tool");
 
     const ps5lm::AskResult answer{ "The sum is 4.", "Add the numbers.", {} };
     const nlohmann::json shaped = nlohmann::json::parse(ps5lm::ask_json(answer, "/data/ArtemisLM/models/a.gguf"), nullptr, false);

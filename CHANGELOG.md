@@ -1,12 +1,25 @@
 # Changelog
 
-ArtemisLM PS5 0.11.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.11.0.zip`.
-`contentVersion` is `01.011.000`. A newer release installs from Settings, or by
+ArtemisLM PS5 0.12.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.0.zip`.
+`contentVersion` is `01.012.000`. A newer release installs from Settings, or by
 copying the `PPSA98010` folder over the installed one.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.0] - 2026-10-18
+
+### Added
+
+- Reference tables in the app for unit conversion, calendar dates, constants,
+  elements, HTTP statuses, and short text codes. Nothing is downloaded and
+  nothing is written under `/data`. The library port answers `POST /reference`.
+  The phone page and LM Studio can call them, and a matching question on the
+  TV is given the figure.
+- Home, Console, and Settings show the current setup more clearly. A setting
+  that leaves the measured default is marked. The phone settings page uses
+  the same groups, including load at launch, sounds, and the scratch warning.
 
 ## [0.11.0] - 2026-10-18
 
