@@ -1,0 +1,1257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e14">
+<title>ArtemisLM</title>
+<!--
+  Chat page for a phone or a computer on the same network as the console.
+  Plain ES5 and XMLHttpRequest: the PS5 browser draws a blank page for a
+  modern bundle, and this file is the only one the server has to find.
+  A question about today reads the console clock, then searches with that
+  date, and only then asks the model. With no model loaded, this page
+  offers a download in Library or a folder in Settings.
+  SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<style>
+  :root {
+    --bg: #0e0e14;
+    --surface: #17171f;
+    --raised: #1e1e28;
+    --border: #2c2c38;
+    --text: #f4f1ea;
+    --body: #e6e2d8;
+    --muted: #a39eae;
+    --faint: #7d7888;
+    --accent: #8b84f0;
+    --accent-ink: #14141c;
+    --err: #e7a59a;
+  }
+  html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+  html, body { margin: 0; height: 100%; background: #0c0c12; color: var(--body);
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #sky { position: fixed; left: 0; top: 0; z-index: 0; pointer-events: none; }
+  .top, .nav, .scroll, .page, .composer { position: relative; z-index: 1; }
+  body { display: flex; flex-direction: column; min-height: 100%; }
+  button, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .top { display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.85rem 1rem 0.8rem;
+    border-bottom: 1px solid var(--border); background: rgba(12, 12, 18, 0.55); }
+  .mark { width: 28px; height: 28px; flex: none; }
+  .brand { color: var(--text); font-weight: 650; letter-spacing: 0.01em; }
+  .brand span { color: var(--accent); font-weight: 650; }
+  .model { color: var(--muted); font-size: 0.875rem; margin-left: auto;
+    max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav { display: flex; gap: 0.4rem; padding: 0 1rem 0.75rem; background: rgba(12, 12, 18, 0.4); }
+  .tab { min-height: 36px; border: 1px solid var(--border); background: transparent;
+    color: var(--muted); border-radius: 999px; padding: 0.3rem 0.85rem; }
+  .tab.on { background: var(--raised); color: var(--text); border-color: var(--raised); }
+  .page { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .page.off, .scroll.off { display: none; }
+  .card { background: rgba(23, 23, 31, 0.92); border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.85rem 1rem; margin: 0 0 0.6rem; }
+  .card h2 { margin: 0 0 0.2rem; color: var(--text); font-size: 1rem; font-weight: 650; }
+  .card p { margin: 0.15rem 0; color: var(--muted); font-size: 0.875rem; line-height: 1.4; }
+  .rowbtns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
+  .rowbtns button, .field button, .searchbar button { min-height: 44px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--raised); color: var(--text); padding: 0 0.8rem; }
+  .rowbtns button.primary, .searchbar button { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 650; }
+  .searchbar, .field { display: flex; gap: 0.5rem; margin: 0 0 0.8rem; }
+  .searchbar input, .field input, .field select { flex: 1; min-width: 0; min-height: 44px; font-size: 16px;
+    color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.4rem 0.7rem; }
+  .check { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; color: var(--body); }
+  .note { color: var(--muted); font-size: 0.875rem; line-height: 1.45; margin: 0 0 0.8rem; }
+  .status { color: var(--faint); font-size: 0.875rem; margin: 0 0 0.6rem; }
+  body.away .composer { display: none; }
+
+  .scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .column { max-width: 42rem; margin: 0 auto; padding: 1.25rem 1rem 2rem; }
+
+  .empty { padding: 8vh 0 1rem; }
+  .empty h1 { color: var(--text); font-size: 1.75rem; font-weight: 600; margin: 0 0 0.4rem;
+    text-shadow: 0 1px 14px rgba(0, 0, 0, 0.7); }
+  .empty p { color: var(--muted); margin: 0 0 1.25rem; line-height: 1.5;
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7); }
+  .ideas { display: flex; flex-direction: column; gap: 0.5rem; }
+  .idea { text-align: left; color: var(--body); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; padding: 0.85rem 1rem;
+    min-height: 44px; }
+  .idea:hover { background: var(--raised); color: var(--text); }
+
+  .msg { margin: 0 0 1.15rem; }
+  .me { display: flex; justify-content: flex-end; }
+  .me div { background: var(--raised); color: var(--text); border-radius: 16px 16px 4px 16px;
+    padding: 0.7rem 0.95rem; max-width: 85%; line-height: 1.45;
+    overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap; }
+  .bot { color: var(--body); line-height: 1.5; }
+  .answer { overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap; }
+  .meta { display: block; color: var(--faint); font-size: 0.8125rem; margin-top: 0.45rem; }
+  .err { color: var(--err); }
+  .caret { display: inline-block; width: 0.45em; height: 1.05em; margin-left: 1px;
+    vertical-align: text-bottom; background: var(--accent); }
+
+  .tools { display: flex; flex-direction: column; gap: 0.45rem; margin: 0 0 0.75rem; }
+  .tools:empty { display: none; }
+  .tool { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.55rem 0.75rem; }
+  .tool-name { color: var(--accent); font-size: 0.75rem; font-weight: 650;
+    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.2rem; }
+  .tool-body { color: var(--muted); font-size: 0.875rem; line-height: 1.4;
+    max-height: 9rem; overflow: auto; -webkit-overflow-scrolling: touch;
+    overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap; }
+  .tool.bad .tool-body { color: var(--err); }
+
+  .composer { flex: none; border-top: 1px solid var(--border); background: rgba(12, 12, 18, 0.88);
+    padding: 0.7rem 1rem 0.85rem; }
+  .composer form { max-width: 42rem; margin: 0 auto; display: flex; gap: 0.5rem; align-items: flex-end; }
+  textarea { flex: 1; min-width: 0; min-height: 44px; max-height: 8rem; resize: none;
+    font-size: 16px; line-height: 1.4; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; padding: 0.65rem 0.8rem; }
+  textarea::placeholder { color: var(--faint); }
+  .send { flex: none; min-width: 4.6rem; min-height: 44px; border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--accent-ink); font-weight: 650; padding: 0 0.9rem; }
+  .send.stop { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
+
+  @supports (padding: env(safe-area-inset-bottom)) {
+    .top { padding-top: calc(0.85rem + env(safe-area-inset-top)); }
+    .composer { padding-bottom: calc(0.85rem + env(safe-area-inset-bottom));
+      padding-left: calc(1rem + env(safe-area-inset-left));
+      padding-right: calc(1rem + env(safe-area-inset-right)); }
+  }
+  @media (min-width: 800px) {
+    html { font-size: 17px; }
+    .top { padding-left: 1.5rem; padding-right: 1.5rem; }
+    .column { padding: 2rem 1.5rem 2.5rem; }
+    .empty h1 { font-size: 2rem; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+    <rect width="32" height="32" rx="8" fill="#17171f"/>
+    <path d="M8 20.5c3.2-1 5.2-3.6 6.4-6.2.5 2.2 2.2 4.2 5.2 5.2" fill="none" stroke="#8b84f0" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M15.2 13.2l4.6-1.6-1.2 4.4-1.5-1.4-1.9 1.9z" fill="#f4f1ea"/>
+    <circle cx="23.5" cy="8.5" r="0.9" fill="#d9d4ff"/>
+    <circle cx="26" cy="11" r="0.6" fill="#b9b3f5"/>
+  </svg>
+  <div class="brand">Artemis<span>LM</span></div>
+  <div class="model" id="model">Connecting</div>
+</header>
+<nav class="nav">
+  <button class="tab on" id="tab-chat" type="button">Chat</button>
+  <button class="tab" id="tab-library" type="button">Library</button>
+  <button class="tab" id="tab-settings" type="button">Settings</button>
+</nav>
+
+<div class="scroll" id="scroll">
+  <div class="column" id="log">
+    <div class="empty" id="empty">
+      <h1>Ask the console</h1>
+      <p>A question about today reads the clock on the PlayStation, then searches the web with that date, and answers from what came back.</p>
+      <div class="ideas">
+        <button class="idea" type="button">What is the USD to AUD rate today?</button>
+        <button class="idea" type="button">What is the weather today?</button>
+        <button class="idea" type="button">What time is it on the console?</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page off" id="view-library">
+  <div class="column">
+    <p class="note">Models already on the console, then a Hugging Face search. Load restarts the console onto that model. Downloads go to the folder chosen in Settings. The home folder is /data/ArtemisLM/models.</p>
+    <div class="status" id="lib-status">Loading the library…</div>
+    <div id="lib-list"></div>
+    <h2 style="color:#f4f1ea;font-size:1.15rem;margin:1.2rem 0 0.6rem;">Search Hugging Face</h2>
+    <div class="searchbar">
+      <input id="hf-q" type="search" placeholder="Qwen, Gemma, Llama…" autocomplete="off">
+      <button id="hf-go" type="button">Search</button>
+    </div>
+    <div class="status" id="hf-status"></div>
+    <div id="hf-list"></div>
+  </div>
+</div>
+
+<div class="page off" id="view-settings">
+  <div class="column">
+    <p class="note">Every layer stays on the GPU. The measured fit is the one this console was tested with. Tight keeps less spare so a longer context can fit, and a load can fail. CPU threads stay on the safe count for this console.</p>
+    <div class="status" id="set-status">Loading settings…</div>
+    <div id="set-form"></div>
+  </div>
+</div>
+
+<div class="composer">
+  <form id="form">
+    <textarea id="input" rows="1" placeholder="Message" autocomplete="off"></textarea>
+    <button class="send" id="send" type="submit">Send</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  var SEARCH_WORDS = ['weather', 'price', 'rate', 'exchange', 'news', 'usd', 'aud', 'eur', 'gbp', 'jpy', 'cad', 'nzd', 'cny', 'stock', 'score', 'forecast', 'population', 'bitcoin'];
+  var CLOCK_WORDS = ['today', 'tonight', 'now', 'current', 'latest', 'date', 'time', 'day', 'weather', 'price', 'rate', 'exchange'];
+  var SKIP = { what: 1, whats: 1, is: 1, the: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, for: 1, me: 1, tell: 1, please: 1, right: 1, this: 1, it: 1, its: 1, and: 1, or: 1, do: 1, you: 1, can: 1, how: 1, about: 1, there: 1, here: 1, from: 1, with: 1, that: 1, my: 1, your: 1, our: 1, who: 1, when: 1, where: 1, why: 1, which: 1, today: 1, tonight: 1, now: 1, current: 1, latest: 1, date: 1, time: 1, day: 1, weather: 1, price: 1, rate: 1, exchange: 1, news: 1, console: 1, playstation: 1, ps5: 1, artemis: 1, artemislm: 1, phone: 1, clock: 1 };
+  var TOOL_NAMES = { get_datetime: 1, web_search: 1, web_fetch: 1 };
+
+  var log = document.getElementById('log');
+  var scroller = document.getElementById('scroll');
+  var form = document.getElementById('form');
+  var input = document.getElementById('input');
+  var send = document.getElementById('send');
+  var history = [];
+  var toolDefs = [];
+  var xhr = null;
+  var turn = null;
+
+  function trim(s) { return String(s || '').replace(/^\s+|\s+$/g, ''); }
+  function hasWord(q, w) {
+    var n = w.length;
+    var at = 0;
+    while (at <= q.length - n) {
+      var i = q.indexOf(w, at);
+      if (i < 0) return false;
+      var left = i > 0 ? q.charAt(i - 1) : '';
+      var right = q.charAt(i + n);
+      var lbad = left >= 'a' && left <= 'z' || left >= '0' && left <= '9';
+      var rbad = right >= 'a' && right <= 'z' || right >= '0' && right <= '9';
+      if (!lbad && !rbad) return true;
+      at = i + n;
+    }
+    return false;
+  }
+  function anyWord(q, list) {
+    for (var i = 0; i < list.length; i++) if (hasWord(q, list[i])) return true;
+    return false;
+  }
+  function hasTopic(q) {
+    var parts = q.replace(/[^a-z0-9]+/g, ' ').split(' ');
+    for (var i = 0; i < parts.length; i++) {
+      var w = parts[i];
+      if (w.length >= 3 && !SKIP[w]) return true;
+    }
+    return false;
+  }
+  // 'search' reads the clock and searches. 'clock' only reads the clock.
+  // 'none' goes straight to the model. "hello" is none. A rate today is search.
+  function classify(raw) {
+    var q = String(raw || '').toLowerCase();
+    var topical = anyWord(q, SEARCH_WORDS);
+    var clockish = topical || anyWord(q, CLOCK_WORDS);
+    if (!clockish) return 'none';
+    if (topical || hasTopic(q)) return 'search';
+    return 'clock';
+  }
+  function browserDay() {
+    var d = new Date();
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+  }
+  function dayFrom(data) {
+    if (!data || typeof data.datetime !== 'string' || data.datetime.length < 10) return '';
+    var d = data.datetime.substring(0, 10);
+    if (d.charAt(4) !== '-' || d.charAt(7) !== '-') return '';
+    return d;
+  }
+  function errText(status, data) {
+    if (data && typeof data.error === 'string') return data.error;
+    if (data && data.error && data.error.message) return data.error.message;
+    if (status === 404) return 'That tool is turned off in Settings on the console.';
+    if (status === 0) return 'The console did not answer.';
+    return 'The request failed (' + status + ').';
+  }
+  function bottom() { scroller.scrollTop = scroller.scrollHeight; }
+  function busy(on) {
+    send.textContent = on ? 'Stop' : 'Send';
+    send.className = on ? 'send stop' : 'send';
+  }
+  function grow() {
+    input.style.height = 'auto';
+    var h = input.scrollHeight;
+    if (h > 128) h = 128;
+    input.style.height = h + 'px';
+  }
+
+  function postJson(url, body, done) {
+    var req = new XMLHttpRequest();
+    xhr = req;
+    req.open('POST', url);
+    req.setRequestHeader('Content-Type', 'application/json');
+    req.onreadystatechange = function () {
+      if (req.readyState !== 4) return;
+      if (xhr === req) xhr = null;
+      var data = null;
+      try { data = JSON.parse(req.responseText); } catch (e) { data = null; }
+      done(req.status, data);
+    };
+    req.send(JSON.stringify(body));
+  }
+
+  function addTool(parent, title, body, bad) {
+    var card = document.createElement('div');
+    card.className = bad ? 'tool bad' : 'tool';
+    var name = document.createElement('div');
+    name.className = 'tool-name';
+    name.textContent = title;
+    var text = document.createElement('div');
+    text.className = 'tool-body';
+    text.textContent = body;
+    card.appendChild(name);
+    card.appendChild(text);
+    parent.appendChild(card);
+    bottom();
+    return text;
+  }
+
+  function systemText(withFetch) {
+    var s = 'You are ArtemisLM, running on a PlayStation 5. When the message includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed or has no figure, say so. Be direct.';
+    if (withFetch) s += ' Call web_fetch on one link only when the snippet is not enough.';
+    return s;
+  }
+
+  function evidence(text, clock, search, math) {
+    var parts = [];
+    if (clock) parts.push(clock);
+    if (math) parts.push(math);
+    if (search) parts.push(search);
+    if (!parts.length) return text;
+    return parts.join('\n\n') + '\n\nQuestion: ' + text;
+  }
+
+  function mathSource(text) {
+    var q = String(text || '').toLowerCase();
+    q = q.replace(/ divided by /g, ' / ').replace(/ times /g, ' * ').replace(/ plus /g, ' + ').replace(/ minus /g, ' - ').replace(/ over /g, ' / ');
+    var leads = ['what is ', 'whats ', "what's ", 'calculate ', 'compute ', 'how much is '];
+    for (var i = 0; i < leads.length; i++) {
+      if (q.indexOf(leads[i]) === 0) q = q.substring(leads[i].length);
+    }
+    q = trim(q).replace(/[?.]+$/g, '');
+    if (!q || q.length > 80) return '';
+    for (var c = 0; c < q.length; c++) {
+      var ch = q.charAt(c);
+      if ('0123456789.+-*/() '.indexOf(ch) < 0) return '';
+    }
+    return q;
+  }
+  function mathEval(src) {
+    var i = 0;
+    function skip() { while (src.charAt(i) === ' ') i += 1; }
+    function factor() {
+      skip();
+      if (src.charAt(i) === '(') {
+        i += 1;
+        var v = expr();
+        skip();
+        if (src.charAt(i) !== ')') return null;
+        i += 1;
+        return v;
+      }
+      var start = i;
+      if (src.charAt(i) === '-' || src.charAt(i) === '+') i += 1;
+      var saw = false;
+      while (src.charAt(i) >= '0' && src.charAt(i) <= '9' || src.charAt(i) === '.') { saw = true; i += 1; }
+      if (!saw) return null;
+      return parseFloat(src.substring(start, i));
+    }
+    function term() {
+      var v = factor();
+      if (v === null) return null;
+      for (;;) {
+        skip();
+        var op = src.charAt(i);
+        if (op !== '*' && op !== '/') return v;
+        i += 1;
+        var r = factor();
+        if (r === null || (op === '/' && r === 0)) return null;
+        v = op === '*' ? v * r : v / r;
+      }
+    }
+    function expr() {
+      var v = term();
+      if (v === null) return null;
+      for (;;) {
+        skip();
+        var op = src.charAt(i);
+        if (op !== '+' && op !== '-') return v;
+        i += 1;
+        var r = term();
+        if (r === null) return null;
+        v = op === '+' ? v + r : v - r;
+      }
+    }
+    var value = expr();
+    skip();
+    if (value === null || i !== src.length || value !== value || value === Infinity || value === -Infinity) return null;
+    return value;
+  }
+  function mathNote(text) {
+    var src = mathSource(text);
+    if (!src) return '';
+    var value = mathEval(src);
+    if (value === null) return '';
+    var shown = String(Math.round(value * 1e10) / 1e10);
+    return 'Calculation: ' + src + ' = ' + shown;
+  }
+
+  function defsFor(kind) {
+    var want = kind === 'search' ? { web_fetch: 1 } : {};
+    var out = [];
+    for (var i = 0; i < toolDefs.length; i++) {
+      var def = toolDefs[i];
+      var name = def && def.function && def.function.name;
+      if (want[name]) out.push(def);
+    }
+    if (kind === 'search' && !out.length) {
+      out.push({ type: 'function', function: { name: 'web_fetch', description: 'Open one http or https page and return its text.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'The address to open' } }, required: ['url'] } } });
+    }
+    return out;
+  }
+
+  function callTool(name, params, done) {
+    postJson('/tools', { tool: name, params: params || {} }, function (status, data) {
+      if (status === 200 && data && typeof data.error !== 'string') done(null, data);
+      else done(errText(status, data), data);
+    });
+  }
+
+  function runToolCall(call, done) {
+    var params = {};
+    try { params = JSON.parse(call.args || '{}'); } catch (e) { params = {}; }
+    if (call.name === 'web_fetch' && !params.url && call.args && call.args.indexOf('http') === 0) {
+      params = { url: trim(call.args) };
+    }
+    if (call.name === 'web_search' && !params.query) params.query = call.args || '';
+    callTool(call.name, params, function (error, data) {
+      var shown = error ? error : JSON.stringify(data);
+      if (!error && data) {
+        if (typeof data.results === 'string') shown = data.results;
+        else if (typeof data.text === 'string') shown = data.text;
+        else if (typeof data.local === 'string') shown = data.local;
+        else if (typeof data.datetime === 'string') shown = data.datetime;
+      }
+      done(error, shown);
+    });
+  }
+
+  function streamAnswer(holder, messages, tools, round) {
+    var answer = holder.answer;
+    var body = '';
+    var calls = [];
+    var seen = 0;
+    var pending = '';
+    var req = new XMLHttpRequest();
+    xhr = req;
+    req.open('POST', '/v1/chat/completions');
+    req.setRequestHeader('Content-Type', 'application/json');
+    function take(chunk) {
+      var choice = chunk.choices && chunk.choices[0];
+      var delta = choice && choice.delta;
+      if (!delta) return;
+      if (delta.content) {
+        body += delta.content;
+        answer.textContent = body;
+      }
+      var list = delta.tool_calls;
+      if (!list) return;
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        var idx = typeof c.index === 'number' ? c.index : i;
+        if (!calls[idx]) calls[idx] = { id: '', name: '', args: '' };
+        if (c.id) calls[idx].id = c.id;
+        if (c.function) {
+          if (c.function.name) calls[idx].name += c.function.name;
+          if (c.function.arguments) calls[idx].args += c.function.arguments;
+        }
+      }
+    }
+    req.onprogress = function () {
+      pending += req.responseText.substring(seen);
+      seen = req.responseText.length;
+      var lines = pending.split('\n');
+      pending = lines.pop();
+      for (var i = 0; i < lines.length; i++) {
+        var line = trim(lines[i]);
+        if (line.indexOf('data:') !== 0) continue;
+        var data = trim(line.substring(5));
+        if (data === '[DONE]') continue;
+        try { take(JSON.parse(data)); } catch (e) {}
+      }
+      bottom();
+    };
+    req.onloadend = function () {
+      if (xhr === req) xhr = null;
+      req.onprogress();
+      if (turn && turn.cancelled) return finishStop(holder, body);
+      var usable = [];
+      for (var i = 0; i < calls.length; i++) {
+        if (calls[i] && calls[i].name && TOOL_NAMES[calls[i].name]) usable.push(calls[i]);
+      }
+      if (req.status && req.status !== 200 && !body) {
+        var parsed = null;
+        try { parsed = JSON.parse(req.responseText); } catch (e2) { parsed = null; }
+        fail(holder, errText(req.status, parsed));
+        return;
+      }
+      if (usable.length > 2) usable = usable.slice(0, 2);
+      if (usable.length && round < 2 && tools.length) {
+        var assistant = { role: 'assistant', content: body || '', tool_calls: [] };
+        for (var k = 0; k < usable.length; k++) {
+          if (!usable[k].id) usable[k].id = 'call_' + round + '_' + k;
+          assistant.tool_calls.push({ id: usable[k].id, type: 'function', function: { name: usable[k].name, arguments: usable[k].args || '{}' } });
+        }
+        messages.push(assistant);
+        var step = 0;
+        function nextCall() {
+          if (!turn || turn.cancelled) return finishStop(holder, body);
+          if (step >= usable.length) return streamAnswer(holder, messages, tools, round + 1);
+          var call = usable[step];
+          step += 1;
+          var label = call.name === 'web_fetch' ? 'Open page' : call.name === 'web_search' ? 'Web search' : 'Date and time';
+          var slot = addTool(holder.tools, label, 'Running ' + call.name + '…', false);
+          runToolCall(call, function (error, shown) {
+            slot.textContent = shown;
+            if (error) slot.parentNode.className = 'tool bad';
+            messages.push({ role: 'tool', tool_call_id: call.id, content: shown });
+            nextCall();
+          });
+        }
+        nextCall();
+        return;
+      }
+      if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
+      if (!body) fail(holder, req.status === 0 ? 'The console did not answer.' : 'No answer. Check that a model is loaded on the console.');
+      else {
+        history.push({ role: 'assistant', content: body });
+        if (history.length > 16) history = history.slice(history.length - 16);
+      }
+      turn = null;
+      busy(false);
+      bottom();
+      input.focus();
+    };
+    var payload = { messages: messages, stream: true, chat_template_kwargs: { enable_thinking: false } };
+    if (tools.length) payload.tools = tools;
+    req.send(JSON.stringify(payload));
+  }
+
+  function finishStop(holder, body) {
+    if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
+    if (!trim(holder.answer.textContent)) holder.answer.textContent = 'Stopped.';
+    if (body) history.push({ role: 'assistant', content: body });
+    turn = null;
+    busy(false);
+  }
+  function fail(holder, message) {
+    if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
+    var err = document.createElement('div');
+    err.className = 'err';
+    err.textContent = message;
+    holder.answer.appendChild(err);
+    turn = null;
+    busy(false);
+    bottom();
+  }
+
+  function start(text) {
+    if (modelReady === false) {
+      showNoModel();
+      return;
+    }
+    var empty = document.getElementById('empty');
+    if (empty) empty.parentNode.removeChild(empty);
+    var mine = document.createElement('div');
+    mine.className = 'msg me';
+    var bubble = document.createElement('div');
+    bubble.textContent = text;
+    mine.appendChild(bubble);
+    log.appendChild(mine);
+
+    var bot = document.createElement('div');
+    bot.className = 'msg bot';
+    var tools = document.createElement('div');
+    tools.className = 'tools';
+    var answer = document.createElement('div');
+    answer.className = 'answer';
+    var caret = document.createElement('span');
+    caret.className = 'caret';
+    bot.appendChild(tools);
+    bot.appendChild(answer);
+    bot.appendChild(caret);
+    log.appendChild(bot);
+    bottom();
+
+    history.push({ role: 'user', content: text });
+    if (history.length > 16) history = history.slice(history.length - 16);
+
+    var kind = classify(text);
+    var holder = { tools: tools, answer: answer, caret: caret };
+    turn = { cancelled: false };
+    busy(true);
+
+    var math = mathNote(text);
+    function ask(clockNote, searchNote) {
+      if (!turn || turn.cancelled) return finishStop(holder, '');
+      var prior = history.slice(0, history.length - 1);
+      var messages = [{ role: 'system', content: systemText(kind === 'search') }];
+      for (var i = 0; i < prior.length; i++) messages.push(prior[i]);
+      messages.push({ role: 'user', content: evidence(text, clockNote, searchNote, math) });
+      streamAnswer(holder, messages, defsFor(kind), 0);
+    }
+
+    function afterClock(clockNote, day) {
+      if (kind !== 'search') return ask(clockNote, '');
+      var query = text;
+      if (day && text.indexOf(day) < 0) query = text + ' ' + day;
+      var slot = addTool(tools, 'Web search', 'Searching for “' + query + '”…', false);
+      callTool('web_search', { query: query, num_results: 5 }, function (error, data) {
+        if (!turn || turn.cancelled) return finishStop(holder, '');
+        var body = error ? error : (data && typeof data.results === 'string' ? data.results : 'No results.');
+        slot.textContent = body;
+        if (error) slot.parentNode.className = 'tool bad';
+        var note = 'Web search for "' + query + '":\n' + body;
+        ask(clockNote, note);
+      });
+    }
+
+    if (math) addTool(tools, 'Calculation', math.replace('Calculation: ', ''), false);
+    if (kind === 'none') return ask('', '');
+    var slotClock = addTool(tools, 'Date and time', 'Reading the console clock…', false);
+    callTool('get_datetime', {}, function (error, data) {
+      if (!turn || turn.cancelled) return finishStop(holder, '');
+      var day = dayFrom(data);
+      var note;
+      if (!error && data && (data.local || data.datetime)) {
+        var shown = data.local || data.datetime;
+        if (day && shown.indexOf(day) < 0) shown = day + ' ' + shown;
+        slotClock.textContent = shown;
+        note = 'Console clock (get_datetime): ' + (data.datetime || day) + (data.local ? ' (' + data.local + ')' : '');
+      } else {
+        day = browserDay();
+        var fallback = (error ? error + ' ' : '') + 'Using the phone clock instead: ' + day + '.';
+        slotClock.textContent = fallback;
+        slotClock.parentNode.className = 'tool bad';
+        note = 'The console clock could not be read. The phone clock says ' + day + '. Treat that as a fallback, not the console.';
+      }
+      afterClock(note, day);
+    });
+  }
+
+  var modelReady = null;
+  var wantFolder = false;
+  function showNoModel() {
+    var empty = document.getElementById('empty');
+    if (empty && !empty.getAttribute('data-idle')) {
+      empty.setAttribute('data-idle', '1');
+      while (empty.firstChild) empty.removeChild(empty.firstChild);
+      var h = document.createElement('h1');
+      h.textContent = 'No model loaded';
+      var p = document.createElement('p');
+      p.textContent = 'Download one from Library, or open Settings and save a folder that already has models.';
+      var ideas = document.createElement('div');
+      ideas.className = 'ideas';
+      function choice(label, tab, folder) {
+        var b = document.createElement('button');
+        b.className = 'idea';
+        b.type = 'button';
+        b.textContent = label;
+        b.onclick = function () {
+          if (folder) wantFolder = true;
+          showTab(tab);
+        };
+        ideas.appendChild(b);
+      }
+      choice('Download a model', 'library', false);
+      choice('Add a model folder', 'settings', true);
+      empty.appendChild(h);
+      empty.appendChild(p);
+      empty.appendChild(ideas);
+    }
+    var box = document.getElementById('input');
+    if (box) box.placeholder = 'Load a model to chat';
+  }
+
+  var info = new XMLHttpRequest();
+  info.open('GET', '/v1/models');
+  info.onload = function () {
+    try {
+      if (info.status !== 200) throw new Error('status');
+      var id = JSON.parse(info.responseText).data[0].id;
+      var name = id.split('/').pop().replace(/\.gguf$/, '').replace(/-(UD-)?(I?Q[0-9].*|BF16|F16|F32)$/i, '').replace(/-/g, ' ');
+      document.getElementById('model').textContent = name;
+      modelReady = true;
+    } catch (e) {
+      modelReady = false;
+      document.getElementById('model').textContent = 'No model loaded';
+      showNoModel();
+    }
+  };
+  info.onerror = function () {
+    modelReady = false;
+    document.getElementById('model').textContent = 'No model loaded';
+    showNoModel();
+  };
+  info.send();
+
+  var toolsReq = new XMLHttpRequest();
+  toolsReq.open('GET', '/tools');
+  toolsReq.onload = function () {
+    try {
+      var list = JSON.parse(toolsReq.responseText);
+      if (!list || !list.length) return;
+      for (var i = 0; i < list.length; i++) {
+        var def = list[i] && list[i].definition;
+        var name = def && def.function && def.function.name;
+        if (TOOL_NAMES[name]) toolDefs.push(def);
+      }
+    } catch (e) {}
+  };
+  toolsReq.send();
+
+  function submit() {
+    if (modelReady === false) {
+      showNoModel();
+      return;
+    }
+    if (xhr || turn) {
+      if (turn) turn.cancelled = true;
+      if (xhr) xhr.abort();
+      xhr = null;
+      return;
+    }
+    var text = trim(input.value);
+    if (!text) return;
+    input.value = '';
+    grow();
+    start(text);
+  }
+
+  form.onsubmit = function (e) {
+    if (e && e.preventDefault) e.preventDefault();
+    submit();
+    return false;
+  };
+  input.oninput = grow;
+  input.onkeydown = function (e) {
+    e = e || window.event;
+    var key = e.key || e.keyCode;
+    var enter = key === 'Enter' || key === 13;
+    if (enter && !e.shiftKey) {
+      if (e.preventDefault) e.preventDefault();
+      submit();
+      return false;
+    }
+  };
+  function panelBase() {
+    var host = location.hostname;
+    if (!host) host = '127.0.0.1';
+    return location.protocol + '//' + host + ':47282';
+  }
+  function panelSend(method, path, body, done) {
+    var req = new XMLHttpRequest();
+    req.open(method, panelBase() + path);
+    if (body) req.setRequestHeader('Content-Type', 'application/json');
+    req.onload = function () {
+      var data = null;
+      try { data = JSON.parse(req.responseText); } catch (e) { data = null; }
+      done(req.status, data, req.responseText);
+    };
+    req.onerror = function () { done(0, null, ''); };
+    req.send(body ? JSON.stringify(body) : null);
+  }
+  function gib(n) {
+    var v = Number(n);
+    if (!v) return '';
+    return (Math.round(v * 10) / 10) + ' GB';
+  }
+  function showTab(name) {
+    document.getElementById('scroll').className = name === 'chat' ? 'scroll' : 'scroll off';
+    document.getElementById('view-library').className = name === 'library' ? 'page' : 'page off';
+    document.getElementById('view-settings').className = name === 'settings' ? 'page' : 'page off';
+    document.body.className = name === 'chat' ? '' : 'away';
+    var ids = ['chat', 'library', 'settings'];
+    for (var i = 0; i < ids.length; i++) {
+      document.getElementById('tab-' + ids[i]).className = ids[i] === name ? 'tab on' : 'tab';
+    }
+    if (name === 'library') loadLibrary();
+    if (name === 'settings') loadSettings();
+  }
+  function loadLibrary() {
+    var status = document.getElementById('lib-status');
+    status.textContent = 'Loading the library…';
+    panelSend('GET', '/library', null, function (code, data) {
+      var list = document.getElementById('lib-list');
+      list.innerHTML = '';
+      if (!data || !data.models) {
+        status.textContent = 'The library on port 47282 did not answer. Chat on this page still works.';
+        return;
+      }
+      status.textContent = data.models.length ? data.models.length + ' models. Home folder ' + data.home + '.' : 'No models yet. Search below, or add a folder in Settings. Home folder ' + data.home + '.';
+      for (var i = 0; i < data.models.length; i++) {
+        (function (m) {
+          var card = document.createElement('div');
+          card.className = 'card';
+          var title = document.createElement('h2');
+          title.textContent = m.label || m.file;
+          var meta = document.createElement('p');
+          var bits = [m.kind || 'Language'];
+          if (m.vision) bits.push('images');
+          if (m.preset) bits.push(m.preset);
+          if (m.folder) bits.push(m.folder);
+          if (m.size_gib) bits.push(gib(m.size_gib));
+          if (m.current) bits.push('running');
+          meta.textContent = bits.join(' · ');
+          var plan = document.createElement('p');
+          plan.textContent = m.plan || '';
+          card.appendChild(title);
+          card.appendChild(meta);
+          card.appendChild(plan);
+          var buttons = document.createElement('div');
+          buttons.className = 'rowbtns';
+          if (m.fits && !m.current) {
+            var load = document.createElement('button');
+            load.type = 'button';
+            load.className = 'primary';
+            load.textContent = 'Load';
+            load.onclick = function () {
+              if (!window.confirm('Load ' + (m.label || 'this model') + '? The console restarts.')) return;
+              load.disabled = true;
+              status.textContent = 'Restarting with ' + (m.label || 'the model') + '.';
+              panelSend('POST', '/load', { path: m.file }, function (c, d) {
+                status.textContent = (d && (d.note || d.error)) || 'Load failed';
+                if (!(d && d.ok)) load.disabled = false;
+              });
+            };
+            buttons.appendChild(load);
+          }
+          if (m.current) {
+            var unload = document.createElement('button');
+            unload.type = 'button';
+            unload.textContent = 'Unload';
+            unload.onclick = function () {
+              if (!window.confirm('Unload the model? The console restarts.')) return;
+              unload.disabled = true;
+              status.textContent = 'Restarting with no model.';
+              panelSend('POST', '/unload', {}, function (c, d) {
+                status.textContent = (d && (d.note || d.error)) || 'Unload failed';
+                if (!(d && d.ok)) unload.disabled = false;
+              });
+            };
+            buttons.appendChild(unload);
+          }
+          if (!m.home) {
+            var move = document.createElement('button');
+            move.type = 'button';
+            move.textContent = 'Move to ArtemisLM';
+            move.onclick = function () {
+              panelSend('POST', '/move', { path: m.file }, function (c, d) {
+                status.textContent = (d && (d.note || d.error)) || 'Move failed';
+                loadLibrary();
+              });
+            };
+            buttons.appendChild(move);
+          }
+          if (!m.current) {
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.textContent = 'Remove';
+            remove.onclick = function () {
+              if (!window.confirm('Delete ' + (m.label || 'this model') + ' from the console?')) return;
+              panelSend('POST', '/remove', { path: m.file }, function (c, d) {
+                status.textContent = (d && (d.note || d.error)) || 'Remove failed';
+                loadLibrary();
+              });
+            };
+            buttons.appendChild(remove);
+          }
+          card.appendChild(buttons);
+          list.appendChild(card);
+        })(data.models[i]);
+      }
+    });
+  }
+  function loadFiles(repo) {
+    var status = document.getElementById('hf-status');
+    status.textContent = 'Opening ' + repo + '…';
+    panelSend('GET', '/search?repo=' + encodeURIComponent(repo), null, function (code, data) {
+      var list = document.getElementById('hf-list');
+      list.innerHTML = '';
+      if (!data || !data.files) {
+        status.textContent = 'Could not list that repository.';
+        return;
+      }
+      status.textContent = data.error ? data.error : data.files.length + ' files in ' + repo;
+      for (var i = 0; i < data.files.length; i++) {
+        (function (f) {
+          var card = document.createElement('div');
+          card.className = 'card';
+          var title = document.createElement('h2');
+          title.textContent = f.file;
+          var meta = document.createElement('p');
+          meta.textContent = f.bytes ? gib(f.bytes / 1073741824) : '';
+          var buttons = document.createElement('div');
+          buttons.className = 'rowbtns';
+          var get = document.createElement('button');
+          get.type = 'button';
+          get.className = 'primary';
+          get.textContent = 'Download';
+          get.onclick = function () {
+            get.disabled = true;
+            panelSend('POST', '/download', { repo: repo, file: f.file, bytes: f.bytes || 0 }, function (c, d) {
+              status.textContent = (d && (d.note || d.error)) || 'Download was not queued';
+              get.disabled = false;
+            });
+          };
+          buttons.appendChild(get);
+          card.appendChild(title);
+          card.appendChild(meta);
+          card.appendChild(buttons);
+          list.appendChild(card);
+        })(data.files[i]);
+      }
+    });
+  }
+  function searchHub() {
+    var q = trim(document.getElementById('hf-q').value);
+    var status = document.getElementById('hf-status');
+    status.textContent = 'Searching…';
+    panelSend('GET', '/search?q=' + encodeURIComponent(q), null, function (code, data) {
+      var list = document.getElementById('hf-list');
+      list.innerHTML = '';
+      if (!data || !data.repos) {
+        status.textContent = 'Search did not answer. The console needs a network path to Hugging Face.';
+        return;
+      }
+      status.textContent = data.error ? data.error : (data.repos.length ? '' : 'Nothing found');
+      for (var i = 0; i < data.repos.length; i++) {
+        (function (r) {
+          var card = document.createElement('div');
+          card.className = 'card';
+          var title = document.createElement('h2');
+          title.textContent = r.id;
+          var meta = document.createElement('p');
+          meta.textContent = r.downloads ? (r.downloads + ' downloads') : '';
+          var buttons = document.createElement('div');
+          buttons.className = 'rowbtns';
+          var open = document.createElement('button');
+          open.type = 'button';
+          open.textContent = 'Files';
+          open.onclick = function () { loadFiles(r.id); };
+          buttons.appendChild(open);
+          card.appendChild(title);
+          card.appendChild(meta);
+          card.appendChild(buttons);
+          list.appendChild(card);
+        })(data.repos[i]);
+      }
+    });
+  }
+  function addSelect(form, label, key, current, options) {
+    var wrap = document.createElement('div');
+    wrap.className = 'field';
+    var sel = document.createElement('select');
+    sel.setAttribute('aria-label', label);
+    for (var i = 0; i < options.length; i++) {
+      var opt = document.createElement('option');
+      opt.value = options[i][0];
+      opt.textContent = label + ': ' + options[i][1];
+      if (String(current) === String(options[i][0])) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.onchange = function () {
+      var body = {};
+      body[key] = sel.value;
+      if (key === 'ctx_cap' || key === 'slots' || key === 'max_tokens') body[key] = Number(sel.value);
+      saveSetting(body);
+    };
+    wrap.appendChild(sel);
+    form.appendChild(wrap);
+  }
+  function addCheck(form, label, key, on) {
+    var wrap = document.createElement('label');
+    wrap.className = 'check';
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = !!on;
+    box.onchange = function () {
+      var body = {};
+      body[key] = box.checked;
+      saveSetting(body);
+    };
+    wrap.appendChild(box);
+    wrap.appendChild(document.createTextNode(label));
+    form.appendChild(wrap);
+  }
+  function saveSetting(body) {
+    var status = document.getElementById('set-status');
+    panelSend('POST', '/settings', body, function (code, data) {
+      status.textContent = data && data.ok ? 'Saved. A loaded model keeps its current limits until the next load.' : ((data && data.error) || 'Could not save');
+    });
+  }
+  var updateTimer = 0;
+  function paintUpdate() {
+    if (updateTimer) {
+      clearTimeout(updateTimer);
+      updateTimer = 0;
+    }
+    var line = document.getElementById('upd-status');
+    var go = document.getElementById('upd-go');
+    if (!line) return;
+    panelSend('GET', '/update', null, function (code, data) {
+      if (!document.getElementById('upd-status')) return;
+      if (!data) {
+        line.textContent = 'Could not ask about updates.';
+        if (go) go.disabled = false;
+        return;
+      }
+      line.textContent = data.status || 'Checking GitHub.';
+      if (go) {
+        go.disabled = !!data.installing;
+        go.textContent = data.installing ? 'Installing...' : (data.ready ? 'Install the update' : 'Check GitHub');
+      }
+      if (data.installing) {
+        updateTimer = setTimeout(paintUpdate, 1500);
+      }
+    });
+  }
+  function loadSettings() {
+    var status = document.getElementById('set-status');
+    var form = document.getElementById('set-form');
+    status.textContent = 'Loading settings…';
+    panelSend('GET', '/settings', null, function (code, data, raw) {
+      form.innerHTML = '';
+      if (!data || typeof data.scan_ps5lm === 'undefined') {
+        status.textContent = 'Settings on port 47282 did not answer.';
+        return;
+      }
+      status.textContent = 'Changes apply on the console. Context and memory apply at the next load.';
+      addCheck(form, 'Also read PS5LM and PS5LM Plus (/data/PS5LM/models)', 'scan_ps5lm', data.scan_ps5lm);
+      addCheck(form, 'Also read M.2, USB and loose files', 'scan_usb', data.scan_usb);
+      addSelect(form, 'Models elsewhere', 'migrate', data.migrate, [['ask', 'Ask'], ['off', 'Leave them'], ['on', 'Move into ArtemisLM']]);
+      addSelect(form, 'Memory fit', 'memory', data.memory, [['measured', 'Measured'], ['tight', 'Tight'], ['roomy', 'More spare']]);
+      addSelect(form, 'Longest context', 'ctx_cap', data.ctx_cap, [['4096', '4k'], ['8192', '8k'], ['16384', '16k'], ['32768', '32k'], ['65536', '64k'], ['131072', '128k']]);
+      addSelect(form, 'Context cache', 'kv_type', data.kv_type, [['auto', 'Auto'], ['f16', 'f16'], ['q8_0', 'q8_0'], ['q4_0', 'q4_0']]);
+      addSelect(form, 'Flash attention', 'flash_attn', data.flash_attn, [['on', 'On'], ['auto', 'Auto'], ['off', 'Off']]);
+      addSelect(form, 'Prompt batch', 'batch', data.batch, [['safe', 'Safe'], ['medium', 'Medium'], ['wide', 'Wide']]);
+      addSelect(form, 'Chats at once', 'slots', data.slots, [['1', 'One'], ['2', 'Two']]);
+      addSelect(form, 'Reply style', 'sampling', data.sampling, [['model', 'Model'], ['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']]);
+      addSelect(form, 'Reply length', 'max_tokens', data.max_tokens, [['-1', 'Unlimited'], ['512', '512'], ['2048', '2048'], ['8192', '8192']]);
+      addSelect(form, 'Reasoning', 'reasoning', data.reasoning, [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']]);
+      addSelect(form, 'System prompt', 'system_prompt', data.system_prompt, [['home', 'Home'], ['helpful', 'Helpful'], ['concise', 'Concise'], ['none', 'None']]);
+      addSelect(form, 'Save downloads to', 'download_dir', data.download_dir, [
+        ['/data/ArtemisLM/models', 'Internal'],
+        ['/mnt/ext0/ArtemisLM/models', 'M.2'],
+        ['/mnt/usb0/ArtemisLM/models', 'USB 0'],
+        ['/mnt/usb1/ArtemisLM/models', 'USB 1']
+      ]);
+      addCheck(form, 'Web search', 'web_search', data.web_search);
+      addCheck(form, 'Date and time', 'datetime', data.datetime);
+      addCheck(form, 'File tools', 'tools', data.tools);
+      var folderNote = document.createElement('p');
+      folderNote.className = 'note';
+      folderNote.textContent = 'A folder that already has models. It must be under /data or /mnt.';
+      form.appendChild(folderNote);
+      var extra = document.createElement('div');
+      extra.className = 'field';
+      var input = document.createElement('input');
+      input.value = data.extra_dir || '';
+      input.placeholder = 'Extra folder, /data/… or /mnt/…';
+      var save = document.createElement('button');
+      save.type = 'button';
+      save.textContent = 'Save folder';
+      save.onclick = function () { saveSetting({ extra_dir: trim(input.value) }); };
+      extra.appendChild(input);
+      extra.appendChild(save);
+      form.appendChild(extra);
+      if (wantFolder) {
+        wantFolder = false;
+        if (extra.scrollIntoView) extra.scrollIntoView();
+        input.focus();
+      }
+      var move = document.createElement('div');
+      move.className = 'rowbtns';
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'primary';
+      button.textContent = 'Move other models into ArtemisLM';
+      button.onclick = function () {
+        panelSend('POST', '/move', {}, function (c, d) {
+          status.textContent = (d && (d.note || d.error)) || 'Nothing moved';
+        });
+      };
+      move.appendChild(button);
+      form.appendChild(move);
+      var upd = document.createElement('div');
+      upd.className = 'rowbtns';
+      var line = document.createElement('div');
+      line.className = 'status';
+      line.id = 'upd-status';
+      line.textContent = 'Checking GitHub.';
+      var go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'primary';
+      go.id = 'upd-go';
+      go.textContent = 'Check GitHub';
+      go.onclick = function () {
+        go.disabled = true;
+        line.textContent = 'Asking GitHub.';
+        panelSend('POST', '/update', { install: true }, function (c, d) {
+          if (d && d.status) line.textContent = d.status;
+          paintUpdate();
+        });
+      };
+      upd.appendChild(line);
+      upd.appendChild(go);
+      form.appendChild(upd);
+      paintUpdate();
+    });
+  }
+  document.getElementById('tab-chat').onclick = function () { showTab('chat'); };
+  document.getElementById('tab-library').onclick = function () { showTab('library'); };
+  document.getElementById('tab-settings').onclick = function () { showTab('settings'); };
+  document.getElementById('hf-go').onclick = searchHub;
+  document.getElementById('hf-q').onkeydown = function (e) {
+    e = e || window.event;
+    var key = e.key || e.keyCode;
+    if (key === 'Enter' || key === 13) {
+      if (e.preventDefault) e.preventDefault();
+      searchHub();
+      return false;
+    }
+  };
+
+  var ideas = document.querySelectorAll('.idea');
+  for (var k = 0; k < ideas.length; k++) {
+    ideas[k].onclick = function () {
+      if (xhr || turn) return;
+      start(this.textContent);
+    };
+  }
+
+  // A paper plane on a ring, drawn on this device. The console keeps its memory for the model.
+  (function sky() {
+    var canvas = document.createElement('canvas');
+    canvas.id = 'sky';
+    if (document.body.firstChild) document.body.insertBefore(canvas, document.body.firstChild);
+    else document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    var reduce = false;
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+      reduce = !!(mq && mq.matches);
+    }
+    var stars = [];
+    var i;
+    for (i = 0; i < 56; i++) {
+      stars.push({ x: Math.random(), y: Math.random(), z: 0.15 + Math.random() * 0.85 });
+    }
+    var w = 1, h = 1, dpr = 1;
+    function size() {
+      dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      w = window.innerWidth || 1;
+      h = window.innerHeight || 1;
+      canvas.width = Math.max(1, Math.floor(w * dpr));
+      canvas.height = Math.max(1, Math.floor(h * dpr));
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function project(x, y, z, rot, cx, cy) {
+      var c = Math.cos(rot), s = Math.sin(rot);
+      var rx = x * c - z * s;
+      var rz = x * s + z * c;
+      var tilt = 0.62;
+      var ry = y * Math.cos(tilt) - rz * Math.sin(tilt);
+      var depth = 4.4 + rz;
+      var f = (w < 700 ? 64 : 92) / depth;
+      return { x: cx + rx * f, y: cy + ry * f, d: depth };
+    }
+    var started = Date.now();
+    function frame() {
+      if (!reduce && document.hidden) {
+        setTimeout(frame, 200);
+        return;
+      }
+      var rot = reduce ? 0.6 : (Date.now() - started) * 0.00018;
+      var cx = w < 700 ? w * 0.5 : w * 0.78;
+      var cy = h * 0.4;
+      var grd = ctx.createLinearGradient(0, 0, 0, h);
+      grd.addColorStop(0, '#12121c');
+      grd.addColorStop(1, '#0c0c12');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, w, h);
+      for (i = 0; i < stars.length; i++) {
+        var star = stars[i];
+        if (!reduce) {
+          star.z -= 0.0018;
+          if (star.z < 0.08) {
+            star.z = 1;
+            star.x = Math.random();
+            star.y = Math.random();
+          }
+        }
+        var k = 1 - star.z;
+        var sx = w * 0.5 + (star.x - 0.5) * w * (0.35 + k * 1.7);
+        var sy = h * 0.42 + (star.y - 0.5) * h * (0.35 + k * 1.7);
+        ctx.fillStyle = 'rgba(217, 212, 255, ' + (0.15 + k * 0.55) + ')';
+        ctx.fillRect(sx, sy, k > 0.7 ? 2 : 1, k > 0.7 ? 2 : 1);
+      }
+      var segs = [];
+      var n = 42;
+      for (i = 0; i < n; i++) {
+        var a0 = i / n * 6.2831853;
+        var a1 = (i + 1) / n * 6.2831853;
+        var p0 = project(Math.cos(a0) * 2.55, 0, Math.sin(a0) * 2.55, rot, cx, cy);
+        var p1 = project(Math.cos(a1) * 2.55, 0, Math.sin(a1) * 2.55, rot, cx, cy);
+        segs.push({ p0: p0, p1: p1, d: (p0.d + p1.d) * 0.5 });
+      }
+      segs.sort(function (a, b) { return b.d - a.d; });
+      for (i = 0; i < segs.length; i++) {
+        var seg = segs[i];
+        var near = seg.d < 3.6;
+        ctx.strokeStyle = near ? 'rgba(139, 132, 240, 0.85)' : 'rgba(139, 132, 240, 0.22)';
+        ctx.lineWidth = near ? 1.6 : 1;
+        ctx.beginPath();
+        ctx.moveTo(seg.p0.x, seg.p0.y);
+        ctx.lineTo(seg.p1.x, seg.p1.y);
+        ctx.stroke();
+      }
+      var pa = -1.5707963;
+      var px = Math.cos(pa) * 2.55, pz = Math.sin(pa) * 2.55;
+      var tx = -Math.sin(pa), tz = Math.cos(pa);
+      function at(along, lift, side) {
+        return project(px + tx * along + Math.cos(pa) * side, lift, pz + tz * along, rot, cx, cy);
+      }
+      var nose = at(0.62, 0.1, 0);
+      var left = at(-0.28, 0.02, -0.7);
+      var right = at(-0.28, 0.02, 0.7);
+      var tail = at(-0.48, 0.28, 0);
+      ctx.beginPath();
+      ctx.moveTo(nose.x, nose.y);
+      ctx.lineTo(left.x, left.y);
+      ctx.lineTo(tail.x, tail.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(244, 241, 234, 0.92)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(185, 179, 245, 0.9)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      if (!reduce) {
+        var raf = window.requestAnimationFrame || function (fn) { setTimeout(fn, 32); };
+        raf(frame);
+      }
+    }
+    size();
+    if (window.addEventListener) window.addEventListener('resize', size, false);
+    frame();
+  })();
+})();
+</script>
+</body>
+</html>

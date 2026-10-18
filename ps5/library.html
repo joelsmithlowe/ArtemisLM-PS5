@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PS5LM</title>
+<!--
+  The model library ps5lm.elf serves on port 8082 and opens in the PS5
+  browser. cobanov.dev's palette in the PS5's own type (SST, the system font,
+  when the browser has it); a plain list with hairline rules, the running
+  model on top. Plain ES5 and XMLHttpRequest with no external files.
+  SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<style>
+  :root {
+    --bg: #000000; --surface: #0b0b0b; --raised: #0f0f0f; --field: #0d0b0b;
+    --border: #2b2523; --text: #fafafa; --body: #ebebeb; --muted: #b5aea9; --faint: #9a9a9a;
+    --accent: #6e81e4; --button: #fafafa; --quiet: #141414; --warn: #e5a29a;
+  }
+  html { font-size: 20px; font-size: clamp(17px, 1.3vw, 26px); -webkit-text-size-adjust: 100%; }
+  html, body { margin: 0; background: var(--bg); color: var(--body);
+    font-family: "SST", "SST Roman", "SST-Roman", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  /* The PS5's own focus: a white frame around what the cursor is on. Kept
+     apart from :focus-visible, since a browser that does not know it drops
+     the whole rule, frame included. */
+  button:focus, a:focus { outline: 3px solid var(--text); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+
+  .top { display: flex; align-items: center; gap: 1rem; height: 3.5rem; padding: 0 1.5rem;
+    border-bottom: 1px solid var(--border); }
+  .brand { color: var(--text); font-weight: 500; flex: 1; }
+  .top a { font-size: 0.875rem; padding: 0.5rem 0; }
+
+  main { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.5rem 3rem; }
+  h1 { color: var(--text); font-size: 2.25rem; font-weight: 300; margin: 0 0 1.4rem; }
+  h2 { color: var(--muted); font-size: 0.875rem; font-weight: 500; margin: 2.5rem 0 0.25rem; }
+
+  .now { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.1rem; margin-bottom: 1.5rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+  .now .what { flex: 1; color: var(--muted); }
+  .now .what b { color: var(--text); font-weight: 500; }
+  .now .what.problem { color: var(--warn); }
+
+  .list { border-top: 1px solid var(--border); }
+  .row { display: flex; align-items: center; gap: 1rem; padding: 1.1rem 0; border-bottom: 1px solid var(--border); }
+  .info { flex: 1; min-width: 0; }
+  .name { color: var(--text); font-weight: 500; }
+  .note { color: var(--muted); font-size: 0.875rem; }
+  .size { color: var(--faint); font-size: 0.875rem; white-space: nowrap; }
+  .progress { height: 3px; background: var(--border); border-radius: 2px; margin: 0.6rem 0 0.35rem; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.6s linear; }
+  .status { color: var(--faint); font-size: 0.8125rem; }
+  .status.problem { color: var(--warn); }
+  .tag { color: var(--accent); font-size: 0.875rem; white-space: nowrap; }
+
+  .actions { display: flex; align-items: center; gap: 0.5rem; }
+  button, a.button { font: inherit; font-size: 0.875rem; font-weight: 500; line-height: 1; white-space: nowrap;
+    border-radius: 4px; padding: 0.7rem 1.1rem; cursor: pointer; display: inline-block; }
+  .primary { color: #000; background: var(--button); border: 1px solid var(--button); }
+  .primary:hover { background: #ffffff; }
+  .ghost { color: var(--body); background: var(--quiet); border: 1px solid var(--border); }
+  .ghost:hover { color: var(--text); background: #1c1c1c; }
+
+  footer { color: var(--faint); font-size: 0.8125rem; margin-top: 2.5rem; }
+  @media (max-width: 560px) {
+    .row { flex-wrap: wrap; }
+    .info { flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="brand">ps5lm</span>
+  <a id="chat-link" href="#" style="display:none">Chat</a>
+  <button id="quit" class="ghost" type="button">Quit</button>
+</header>
+<main>
+  <h1>Models</h1>
+  <div class="now" id="now"><span class="what">Loading</span></div>
+  <div class="list" id="catalog"></div>
+  <h2 id="other-title" style="display:none">Copied to the console</h2>
+  <div class="list" id="other"></div>
+  <footer id="foot"></footer>
+</main>
+<script>
+(function () {
+  var host = location.hostname;
+  var state = null;
+  var lastText = '';   // the last state the page was drawn from
+  var busy = false;    // a poll is out
+  var again = false;   // poll again when it is back
+  var misses = 0;      // polls in a row that got no answer
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function size(bytes) {
+    var gb = bytes / 1073741824;
+    return gb >= 1 ? gb.toFixed(1) + ' GB' : Math.round(bytes / 1048576) + ' MB';
+  }
+  // Qwen3.5-2B-Q4_K_M.gguf reads as Qwen3.5 2B.
+  function short(file) {
+    return file.replace(/\.gguf$/, '').replace(/-(UD-)?(I?Q[0-9].*|BF16|F16|F32)$/i, '').replace(/-/g, ' ');
+  }
+
+  function post(path) {
+    var x = new XMLHttpRequest();
+    x.open('POST', path);
+    x.onloadend = refresh;
+    x.send();
+  }
+  // Each control carries a key, so focus can go back to it after a redraw.
+  function button(label, kind, path) {
+    var b = el('button', kind, label);
+    b.type = 'button';
+    b.setAttribute('data-k', path);
+    b.onclick = function () { post(path); };
+    return b;
+  }
+
+  function chatUrl() { return 'http://' + host + ':' + state.chat.port + '/'; }
+
+  function renderNow() {
+    var box = document.getElementById('now');
+    var chat = state.chat;
+    var link = document.getElementById('chat-link');
+    box.innerHTML = '';
+    var what = el('span', 'what');
+    if (chat.model && chat.ready) {
+      what.appendChild(document.createTextNode('Running '));
+      what.appendChild(el('b', '', short(chat.model)));
+      box.appendChild(what);
+      var open = el('a', 'button primary', 'Open chat');
+      open.href = chatUrl();
+      open.setAttribute('data-k', 'open-chat');
+      box.appendChild(open);
+      box.appendChild(button('Stop', 'ghost', '/api/stop'));
+      link.href = chatUrl();
+      link.style.display = '';
+    } else if (chat.model) {
+      what.appendChild(document.createTextNode('Starting '));
+      what.appendChild(el('b', '', short(chat.model)));
+      box.appendChild(what);
+      link.style.display = 'none';
+    } else {
+      if (chat.error) {
+        what.className = 'what problem';
+        what.textContent = chat.error;
+      } else {
+        what.textContent = 'Nothing running. Download a model, then run it.';
+      }
+      box.appendChild(what);
+      link.style.display = 'none';
+    }
+  }
+
+  function row(m) {
+    var r = el('div', 'row');
+    var info = el('div', 'info');
+    info.appendChild(el('div', 'name', m.name));
+    if (m.note) info.appendChild(el('div', 'note', m.note));
+    var d = m.download;
+    var downloading = d && d.active;
+    if (downloading) {
+      var bar = el('div', 'progress');
+      var fill = el('i');
+      fill.style.width = (d.total ? Math.floor(100 * d.done / d.total) : 0) + '%';
+      bar.appendChild(fill);
+      info.appendChild(bar);
+      info.appendChild(el('div', 'status', size(d.done) + ' of ' + size(d.total) +
+        (d.speed ? ', ' + (d.speed / 1048576).toFixed(1) + ' MB/s' : '')));
+    } else if (d && d.error && !m.installed) {
+      var paused = d.error === 'paused' || d.error === 'cancelled';
+      info.appendChild(el('div', paused ? 'status' : 'status problem',
+        paused ? 'Paused at ' + size(d.done) : d.error));
+    }
+    r.appendChild(info);
+    r.appendChild(el('span', 'size', size(m.size)));
+
+    var actions = el('div', 'actions');
+    var tooBig = state.max_model && m.size > state.max_model;
+    if (downloading) {
+      actions.appendChild(button('Cancel', 'ghost', '/api/cancel?id=' + encodeURIComponent(m.id)));
+    } else if (m.installed && state.chat.model === m.file) {
+      actions.appendChild(el('span', 'tag', state.chat.ready ? 'Running' : 'Starting'));
+    } else if (m.installed && tooBig) {
+      actions.appendChild(el('span', 'status problem', 'Too big to run'));
+      actions.appendChild(button('Delete', 'ghost', '/api/delete?file=' + encodeURIComponent(m.file)));
+    } else if (m.installed) {
+      actions.appendChild(button('Run', 'primary', '/api/run?file=' + encodeURIComponent(m.file)));
+      actions.appendChild(button('Delete', 'ghost', '/api/delete?file=' + encodeURIComponent(m.file)));
+    } else {
+      actions.appendChild(button(d && d.done ? 'Resume' : 'Download', 'primary',
+        '/api/download?id=' + encodeURIComponent(m.id)));
+    }
+    r.appendChild(actions);
+    return r;
+  }
+
+  // The lists are rebuilt on every change, which drops the element the
+  // controller was on; put focus back on the control with the same key.
+  function render() {
+    var active = document.activeElement;
+    var key = active && active.getAttribute ? active.getAttribute('data-k') : null;
+    draw();
+    if (!key) return;
+    var nodes = document.querySelectorAll('[data-k]');
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].getAttribute('data-k') === key) {
+        nodes[i].focus();
+        return;
+      }
+    }
+  }
+
+  function draw() {
+    document.getElementById('quit').style.display = '';
+    renderNow();
+    var list = document.getElementById('catalog');
+    list.innerHTML = '';
+    var known = {};
+    for (var i = 0; i < state.catalog.length; i++) {
+      known[state.catalog[i].file] = true;
+      list.appendChild(row(state.catalog[i]));
+    }
+    var other = document.getElementById('other');
+    other.innerHTML = '';
+    var count = 0;
+    for (var j = 0; j < state.installed.length; j++) {
+      var f = state.installed[j];
+      if (known[f.file]) continue;
+      count++;
+      other.appendChild(row({ id: '', name: short(f.file), note: '', file: f.file, size: f.size, installed: true }));
+    }
+    document.getElementById('other-title').style.display = count ? '' : 'none';
+    var foot = 'PS5LM ' + state.version + '.';
+    if (state.free >= 0) foot += ' ' + size(state.free) + ' free.';
+    if (state.ip) foot += ' On a phone or computer: http://' + state.ip + ':' + state.port;
+    document.getElementById('foot').textContent = foot;
+  }
+
+  // After the payload is gone (Quit, Payload Manager, a reboot), say so
+  // instead of leaving buttons that do nothing.
+  function down() {
+    lastText = '';
+    var box = document.getElementById('now');
+    box.innerHTML = '';
+    box.appendChild(el('span', 'what problem', 'PS5LM is not running. Start it again from Payload Manager.'));
+    document.getElementById('catalog').innerHTML = '';
+    document.getElementById('other').innerHTML = '';
+    document.getElementById('other-title').style.display = 'none';
+    document.getElementById('chat-link').style.display = 'none';
+    document.getElementById('quit').style.display = 'none';
+    document.getElementById('quit').textContent = 'Quit';
+    document.getElementById('foot').textContent = '';
+  }
+
+  // One poll at a time; the page is redrawn only when the state changed.
+  function refresh() {
+    if (busy) {
+      again = true;
+      return;
+    }
+    busy = true;
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/state');
+    x.timeout = 4000;
+    x.onloadend = function () {
+      busy = false;
+      if (x.status !== 200) {
+        if (++misses >= 2) down();
+      } else {
+        misses = 0;
+        if (x.responseText !== lastText) {
+          lastText = x.responseText;
+          try { state = JSON.parse(lastText); render(); } catch (e) {}
+        }
+      }
+      if (again) {
+        again = false;
+        refresh();
+      }
+    };
+    x.send();
+  }
+
+  // Two presses, so a stray one on the controller does not end a chat.
+  var quit = document.getElementById('quit');
+  var armed = null;
+  quit.onclick = function () {
+    if (armed) {
+      clearTimeout(armed);
+      armed = null;
+      quit.textContent = 'Quitting';
+      post('/api/quit');
+      return;
+    }
+    quit.textContent = 'Press again to quit';
+    armed = setTimeout(function () {
+      armed = null;
+      quit.textContent = 'Quit';
+    }, 4000);
+  };
+
+  refresh();
+  setInterval(refresh, 1500);
+})();
+</script>
+</body>
+</html>

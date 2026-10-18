@@ -1,0 +1,160 @@
+<p align="center">
+  <img src="ps5/app/sce_sys/icon0.png" width="128" alt="ArtemisLM">
+</p>
+
+<h1 align="center">ArtemisLM</h1>
+
+<p align="center">
+  <b>A language model that lives on the console, by Joel Smith-Lowe.</b><br>
+  The PlayStation runs the model. A phone or a computer on the same network opens the chat, the library and the settings.
+</p>
+
+<p align="center">
+  <b><a href="https://github.com/joelsmithlowe/ArtemisLM">Source</a></b> ·
+  <a href="#try-it">Get started</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+ArtemisLM is its own title, PPSA98010, with its own folder, `/data/ArtemisLM`. Models live in
+`/data/ArtemisLM/models`. The app also reads `/data/PS5LM/models`, the folder PS5LM and PS5LM Plus
+already share, and the same kind of folder on an M.2 or USB drive. A copy found elsewhere can stay
+where it is, or be moved home and the old file removed.
+
+The chat reads the console clock, searches the web, and works out a plain sum before it asks the
+model. Settings on the television and on the phone page cover context, flash attention, the prompt
+batch, and how much spare memory to keep. Measured is the spare this console was tested with.
+
+The pictures on this page are drawn for ArtemisLM. They are the mark, and the phone page.
+
+<p align="center">
+  <img src="docs/media/artemislm-mark.gif" width="720" alt="ArtemisLM: a paper plane follows a trail of code toward a few stars">
+</p>
+
+<p align="center">
+  <img src="docs/media/artemislm-chat.gif" width="49%" alt="The phone chat works out 17 times 23 and shows 391">
+  <img src="docs/media/artemislm-library.gif" width="49%" alt="The library lists a model at home and one still in the PS5LM folder, then moves it">
+  <br><sub>Chat works out a sum before the model answers. Library can move a model from the PS5LM folder into /data/ArtemisLM/models.</sub>
+</p>
+
+## What it does
+
+- **It runs on the GPU.** llama.cpp's Vulkan backend on the console's RDNA 2 GPU, with 11.4 GB of the
+  shared memory for the model and its context. Every architecture and quantization llama.cpp knows
+  comes along. Every layer stays on the GPU.
+- **It answers your network.** OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages` (Claude Code
+  works against it) and a chat page in any browser. Point a client at `http://<console>:47281` and use
+  any model name: the loaded one answers. With nothing loaded, that address still opens the page, so a
+  model can be downloaded or a folder added. The paths are unchanged. Port 47282 lists the models,
+  and can load or unload one.
+- **It decides, too.** Load a decision model and the console answers TypeSafe's `/v1/systemone`:
+  choice, score and yes-or-no questions about text and images, the API Ollaya serves on a PC.
+- **It shows its work.** Every request streams across the TV as a chat: which device asked, what it
+  asked, and the reply as it is written. Square sends a demo and Triangle opens a keyboard, so the
+  console can be tried from the couch.
+- **It watches the console.** A Console page charts temperature, power, GPU and CPU load over the
+  last two minutes or the last hour, beside a table of every reading.
+- **It picks what fits.** The planner reads each GGUF and gives it the longest context and best cache
+  that fit the memory free. A Suggested list holds models measured on the console, and the app
+  downloads from Hugging Face by itself, to internal storage, the M.2 drive or a USB drive.
+- **It reads images.** Models with an image projector (Gemma 4, MiniCPM-V, d1) take pictures in chat
+  and in decisions.
+
+| Model | Size | On a PS5 Slim |
+|---|---|---|
+| Qwen 3.5 0.8B, Q4_K_M | 0.5 GB | 207 tokens a second |
+| Qwen 3.5 9B, Q4_K_M | 5.3 GB | 55 tokens a second |
+| Qwen 3.8 27B, UD-Q2_K_XL | 9.2 GB | about 20 tokens a second, 64k context |
+| d1 Omni 600M, a decision model | 1.1 GB | 3 questions in 0.3 s; a 720p image and 7 questions in 2.9 s |
+
+## Decision models
+
+A decision model reads a state and answers typed questions in one forward pass, with no text
+generated. The request is `/v1/systemone`, the API [Ollaya](https://github.com/ollaya-dev/ollaya)
+serves on a PC.
+
+```sh
+curl http://<console>:47281/v1/systemone -H 'Content-Type: application/json' -d '{
+  "state": "I was charged twice this month. Refund me or I cancel.",
+  "questions": {
+    "intent": {"type": "choice", "instructions": "What does the customer want?",
+               "criteria": {"refund": null, "information": null, "cancel": null}},
+    "angry":  {"type": "noul", "instructions": "Is the customer angry?"}
+  }
+}'
+```
+
+The Suggested list has d1 Omni 600M, d1 3B and Clef Flash. Any GGUF that carries llama.cpp's
+decision metadata loads the same way, and the app labels it a decision model.
+
+## Try it
+
+You need a PS5 on firmware 7.00 to 13.60, jailbroken, with these payloads loaded:
+
+| Payload | For | |
+|---|---|---|
+| [kstuff-lite](https://github.com/EchoStretch/kstuff-lite) | the kernel patches homebrew runs on | required |
+| [etaHEN](https://github.com/etaHEN/etaHEN) | homebrew support | required |
+| [ShadowMountPlus](https://github.com/drakmor/ShadowMountPlus) | puts the app on the home screen from `/data/homebrew` | required |
+| [elfldr](https://github.com/ps5-payload-dev/elfldr) (port 9021) | temperature, power and real free space, through ps5-exporter | recommended |
+| [ftpsrv](https://github.com/ps5-payload-dev/ftpsrv) (port 2121) | installing the app, copying models from a PC | recommended |
+
+1. Download `artemislm-app-vX.Y.Z.zip` from the [releases](https://github.com/joelsmithlowe/ArtemisLM/releases) and unzip it.
+2. Copy the `PPSA98010` folder to `/data/homebrew` over FTP. ShadowMountPlus adds **ArtemisLM** to the
+   home screen. PS5LM can stay installed beside it.
+3. Open ArtemisLM. The first launch creates `/data/ArtemisLM/models`. With nothing loaded, open
+   `http://<console>:47281`. Library can download a model, and Settings can add a folder that already
+   has one. A model can also come from **Models > Suggested**, or from a `.gguf` copied into that
+   folder, or into `ArtemisLM/models` on a USB drive. A model already in
+   `/data/PS5LM/models` (PS5LM or PS5LM Plus) is read too. **Settings > Library** can copy
+   those files into `/data/ArtemisLM/models` and delete the old ones.
+4. Load it. Once Home says Ready, the same address is the chat, or point your OpenAI or
+   Anthropic client at it. Library and Settings on that page use port 47282 on the same console.
+   A question about today uses the console clock, then the web search. A plain sum is worked out first.
+
+To update, open **Settings > Sound and storage > App update**, or the same button on the
+phone page. The app checks the GitHub releases, checks the zip, and installs it into
+`/data/homebrew/PPSA98010`, then restarts. The first copy of that folder still has to be
+put there over FTP. Models and settings stay in `/data/ArtemisLM`. Copying a new folder
+over the old one still works. Using it from coding tools (opencode, Codex, Claude Code) is in
+[docs/CLI.md](docs/CLI.md).
+
+| Where | Button | Does |
+|---|---|---|
+| Everywhere | L1 / R1 | Home, Models, API, Console, Settings |
+| Home | Cross | change the model |
+| Home | Square / Triangle | send a demo request / type a message |
+| Models | D-pad, Cross | choose a section and a model; load, unload or download it |
+| Models, Search | L2 / R2, Square | change the search; check whether a file fits |
+| Models, Downloads | Cross, Square | pause or resume; cancel (press twice) or clear |
+| Console | L2 / R2 | the last two minutes / the last hour |
+| Settings | D-pad, Cross | choose a category and a row; flip it, or pick from its list |
+| Settings, Diagnostics | Square, Triangle | app or server log; errors only |
+
+## Want to tinker?
+
+C++ on [ps5-homebrew-ui](https://github.com/blackbearreloaded/ps5-homebrew-ui), llama.cpp with
+ggml-vulkan on [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan)'s RADV, built on Linux.
+
+[Building](docs/BUILDING.md) · [Console notes](docs/CONSOLE.md) · [Porting](docs/PORTING.md) ·
+[Research](docs/RESEARCH.md) · [Models that fit](docs/MODELS.md) · [Roadmap](docs/ROADMAP.md) ·
+[Changelog](CHANGELOG.md) · [The original payload](docs/PAYLOAD.md)
+
+## Thanks
+
+- [abhi245y](https://github.com/abhi245y), who built the native GPU app this one grew from (PS5LM Plus).
+- [llama.cpp and ggml](https://github.com/ggml-org/llama.cpp), which do the actual work.
+- [Mihawk-99](https://github.com/mihawk-99) for PS5_Vulkan and RADV on the PS5, and
+  [PS5CEMU-HAR](https://github.com/premohq/PS5CEMU-HAR) for the driver patches in `patches/mesa`.
+- [BlackBearReloaded](https://github.com/blackbearreloaded) for ps5-homebrew-ui, ps5-opengl and
+  ps5-homebrew-dev-protocol, and [John Törnblom](https://github.com/ps5-payload-dev) for the SDK.
+- [Marice](https://github.com/Marice/ps5-exporter) for ps5-exporter, which the app carries.
+- [Manrope](https://github.com/sharanda/manrope) (OFL) for the type, and
+  [PocketVibe](https://github.com/cobanov/pocketvibe) for the interface sounds.
+
+---
+
+GPL-3.0-or-later, see [LICENSE](LICENSE). llama.cpp keeps its MIT licence, Manrope its OFL. No Sony
+SDK files, keys, firmware or model weights are in this repository.
+
+ArtemisLM is not affiliated with Sony Interactive Entertainment. "PlayStation" and "PS5" are trademarks
+of Sony Interactive Entertainment. This build stands on PS5LM by cobanov; the credits on the console name that work.

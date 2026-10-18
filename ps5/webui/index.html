@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PS5LM</title>
+<!--
+  The chat page llama-server serves on the PS5 (ps5lm.elf, port 8081).
+  cobanov.dev's palette in the PS5's own type (SST, the system font, when the
+  browser has it), laid out like a plain chat client: one reading column,
+  your messages in a quiet box, answers as text. Plain ES5 and
+  XMLHttpRequest with no external files, because the PS5 browser renders
+  modern bundles blank. Sized from the viewport, so it reads on a TV and on
+  a phone.
+  SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<style>
+  :root {
+    --bg: #000000; --surface: #0b0b0b; --raised: #0f0f0f; --field: #0d0b0b;
+    --border: #2b2523; --text: #fafafa; --body: #ebebeb; --muted: #b5aea9; --faint: #9a9a9a;
+    --accent: #6e81e4; --button: #fafafa; --quiet: #141414;
+  }
+  html { font-size: 20px; font-size: clamp(17px, 1.3vw, 26px); -webkit-text-size-adjust: 100%; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--body);
+    font-family: "SST", "SST Roman", "SST-Roman", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.55; }
+  body { display: flex; flex-direction: column; }
+  a { color: var(--accent); text-decoration: none; }
+  /* The PS5's own focus: a white frame around what the cursor is on. Kept
+     apart from :focus-visible, since a browser that does not know it drops
+     the whole rule, frame included. */
+  button:focus, input:focus { outline: 3px solid var(--text); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+
+  .top { display: flex; align-items: center; gap: 1rem; height: 3.5rem; padding: 0 1.5rem;
+    border-bottom: 1px solid var(--border); }
+  .brand { color: var(--text); font-weight: 500; }
+  .model { color: var(--muted); font-size: 0.875rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top a { font-size: 0.875rem; padding: 0.5rem 0; }
+
+  .scroll { flex: 1; overflow-y: auto; }
+  .column { max-width: 46rem; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  .empty { padding-top: 12vh; }
+  .empty h1 { color: var(--text); font-size: 2.25rem; font-weight: 300; margin: 0 0 0.4rem; }
+  .empty p { color: var(--muted); margin: 0 0 2rem; }
+  .ideas { display: flex; flex-direction: column; gap: 0.6rem; }
+  .idea { text-align: left; font: inherit; font-size: 1rem; color: var(--body); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 4px; padding: 0.85rem 1.1rem; cursor: pointer; }
+  .idea:hover { background: var(--quiet); color: var(--text); }
+
+  .msg { margin: 0 0 1.75rem; white-space: pre-wrap; word-wrap: break-word; }
+  .me { display: flex; justify-content: flex-end; }
+  .me div { background: var(--raised); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 0.6rem 1rem; max-width: 80%; }
+  .bot { color: var(--body); }
+  .bot .meta { display: block; color: var(--faint); font-size: 0.8125rem; margin-top: 0.4rem; }
+  .bot .error { color: #e5a29a; }
+  .caret { display: inline-block; width: 0.5em; height: 1.1em; vertical-align: text-bottom; background: var(--muted); }
+
+  .composer { border-top: 1px solid var(--border); background: var(--bg); }
+  .composer form { max-width: 46rem; margin: 0 auto; padding: 1rem 1.5rem 1.25rem; display: flex; gap: 0.6rem; }
+  .composer input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 4px; padding: 0.8rem 1rem; }
+  .composer input::placeholder { color: var(--faint); }
+  .composer button { font: inherit; font-size: 0.9375rem; font-weight: 500; color: #000; background: var(--button);
+    border: 0; border-radius: 4px; padding: 0 1.4rem; cursor: pointer; }
+  .composer button:hover { background: #ffffff; }
+  .composer button.stop { background: var(--quiet); color: var(--text); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="brand">ps5lm</span>
+  <span class="model" id="model"></span>
+  <a id="models" href="#">Models</a>
+</header>
+
+<div class="scroll" id="scroll">
+  <div class="column" id="log">
+    <div class="empty" id="empty">
+      <h1>Ask something</h1>
+      <p>A language model running on this PS5's own processor.</p>
+      <div class="ideas">
+        <button class="idea" type="button">Who are you?</button>
+        <button class="idea" type="button">Write a haiku about the PS5</button>
+        <button class="idea" type="button">Explain how a CPU works in two sentences</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="composer">
+  <form id="form">
+    <input id="input" type="text" autocomplete="off" placeholder="Message">
+    <button id="send" type="submit">Send</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  // What the model knows about itself. The name fills in from /v1/models.
+  var modelName = 'a language model';
+  // Small models copy an example answer far better than they follow a rule.
+  function systemPrompt() {
+    return 'You are ' + modelName + ', an open-weight language model running locally on this ' +
+      'PlayStation 5 with PS5LM, a port of llama.cpp. You run on the console\'s own CPU, offline, and ' +
+      'the conversation stays on this console. If someone asks who you are or where you run, answer in ' +
+      'their language along the lines of: "I\'m ' + modelName + ', running right here on this PS5\'s own ' +
+      'processor with PS5LM." Keep answers to one to three short sentences unless asked for more, and ' +
+      'always reply in the language the user writes in.';
+  }
+  var log = document.getElementById('log');
+  var scroller = document.getElementById('scroll');
+  var form = document.getElementById('form');
+  var input = document.getElementById('input');
+  var send = document.getElementById('send');
+  var messages = [];
+  var xhr = null;
+
+  // ps5lm.elf serves its model library on port 8082.
+  document.getElementById('models').href = 'http://' + location.hostname + ':8082/';
+
+  var info = new XMLHttpRequest();
+  info.open('GET', '/v1/models');
+  info.onload = function () {
+    try {
+      var id = JSON.parse(info.responseText).data[0].id;
+      // Qwen3.5-2B-Q4_K_M.gguf reads as Qwen3.5 2B.
+      modelName = id.split('/').pop().replace(/\.gguf$/, '')
+        .replace(/-(UD-)?(I?Q[0-9].*|BF16|F16|F32)$/i, '').replace(/-/g, ' ');
+      document.getElementById('model').textContent = modelName;
+    } catch (e) {}
+  };
+  info.send();
+
+  function add(cls) {
+    var empty = document.getElementById('empty');
+    if (empty) empty.parentNode.removeChild(empty);
+    var div = document.createElement('div');
+    div.className = 'msg ' + cls;
+    log.appendChild(div);
+    return div;
+  }
+  function bottom() { scroller.scrollTop = scroller.scrollHeight; }
+  function busy(on) {
+    send.textContent = on ? 'Stop' : 'Send';
+    send.className = on ? 'stop' : '';
+  }
+
+  function ask(text) {
+    messages.push({ role: 'user', content: text });
+    if (messages.length > 12) messages = messages.slice(messages.length - 12);
+
+    var mine = add('me');
+    var box = document.createElement('div');
+    box.textContent = text;
+    mine.appendChild(box);
+
+    var out = add('bot');
+    var body = document.createTextNode('');
+    var caret = document.createElement('span');
+    caret.className = 'caret';
+    out.appendChild(body);
+    out.appendChild(caret);
+    bottom();
+
+    var answer = '', seen = 0, pending = '';
+    xhr = new XMLHttpRequest();
+    xhr.open('POST', '/v1/chat/completions');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+
+    // Server-sent events arrive in pieces: handle whole "data:" lines.
+    xhr.onprogress = function () {
+      pending += xhr.responseText.substring(seen);
+      seen = xhr.responseText.length;
+      var lines = pending.split('\n');
+      pending = lines.pop();
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].replace(/^\s+|\s+$/g, '');
+        if (line.indexOf('data:') !== 0) continue;
+        var data = line.substring(5).replace(/^\s+/, '');
+        if (data === '[DONE]') continue;
+        var chunk;
+        try { chunk = JSON.parse(data); } catch (e) { continue; }
+        var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+        if (delta && delta.content) {
+          answer += delta.content;
+          body.nodeValue = answer;
+        }
+        if (chunk.timings) {
+          var meta = document.createElement('span');
+          meta.className = 'meta';
+          meta.textContent = chunk.timings.predicted_n + ' tokens, ' +
+            chunk.timings.predicted_per_second.toFixed(1) + ' tokens a second';
+          out.appendChild(meta);
+        }
+        bottom();
+      }
+    };
+
+    xhr.onloadend = function () {
+      xhr.onprogress();
+      if (caret.parentNode) caret.parentNode.removeChild(caret);
+      if (!answer) {
+        var err = document.createElement('span');
+        err.className = 'error';
+        err.textContent = xhr.status === 0 ? 'Stopped.' :
+          'No answer (' + xhr.status + '). Check that a model is running in the library.';
+        out.appendChild(err);
+      } else {
+        messages.push({ role: 'assistant', content: answer });
+      }
+      xhr = null;
+      busy(false);
+      bottom();
+      input.focus();
+    };
+
+    // Small models on a few CPU cores: short answers, no thinking phase.
+    xhr.send(JSON.stringify({
+      messages: [{ role: 'system', content: systemPrompt() }].concat(messages),
+      stream: true,
+      max_tokens: 256,
+      chat_template_kwargs: { enable_thinking: false }
+    }));
+    busy(true);
+  }
+
+  form.onsubmit = function (e) {
+    e.preventDefault();
+    if (xhr) { xhr.abort(); return; }
+    var text = input.value.replace(/^\s+|\s+$/g, '');
+    if (!text) return;
+    input.value = '';
+    ask(text);
+  };
+
+  var ideas = document.querySelectorAll('.idea');
+  for (var k = 0; k < ideas.length; k++) {
+    ideas[k].onclick = function () { if (!xhr) ask(this.textContent); };
+  }
+})();
+</script>
+</body>
+</html>

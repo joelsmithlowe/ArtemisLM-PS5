@@ -1,0 +1,509 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "model_plan.hpp"
+#include "ports.hpp"
+
+#include <dirent.h>
+#include <sys/stat.h>
+
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
+#include <map>
+
+namespace ps5lm {
+
+namespace {
+
+constexpr double kGiB = 1073741824.0;
+
+// GGUF metadata value types.
+enum : uint32_t { U8, I8, U16, I16, U32, I32, F32, BOOL, STRING, ARRAY, U64, I64, F64 };
+
+// A GGUF header from a file, or from memory (the start of a remote file);
+// the PS5's libc has no fmemopen.
+struct Reader {
+    FILE *       f   = nullptr;
+    const char * mem = nullptr;
+    size_t       size = 0, pos = 0;
+    bool         bad = false;
+
+    size_t read(void * out, size_t n) {
+        if (f) {
+            return std::fread(out, 1, n, f);
+        }
+        const size_t k = pos + n <= size ? n : 0;
+        std::memcpy(out, mem + pos, k);
+        pos += k;
+        return k;
+    }
+    template <typename T> T get() {
+        T v{};
+        if (read(&v, sizeof(v)) != sizeof(v)) {
+            bad = true;
+        }
+        return v;
+    }
+    std::string str() {
+        const uint64_t n = get<uint64_t>();
+        if (bad || n > (1u << 24)) {
+            bad = true;
+            return {};
+        }
+        std::string s(n, '\0');
+        if (n && read(s.data(), n) != n) {
+            bad = true;
+        }
+        return s;
+    }
+    void skip(uint64_t n) {
+        if (f ? std::fseek(f, (long) n, SEEK_CUR) != 0 : pos + n > size) {
+            bad = true;
+        }
+        pos += f ? 0 : n;
+    }
+};
+
+uint64_t scalar_size(uint32_t t) {
+    switch (t) {
+        case U8: case I8: case BOOL: return 1;
+        case U16: case I16: return 2;
+        case U32: case I32: case F32: return 4;
+        case U64: case I64: case F64: return 8;
+        default: return 0;
+    }
+}
+
+// A scalar as an integer; 0 for strings and arrays.
+uint64_t read_int(Reader & r, uint32_t t) {
+    switch (t) {
+        case U8: return r.get<uint8_t>();
+        case I8: return (uint64_t) r.get<int8_t>();
+        case U16: return r.get<uint16_t>();
+        case I16: return (uint64_t) r.get<int16_t>();
+        case U32: return r.get<uint32_t>();
+        case I32: return (uint64_t) r.get<int32_t>();
+        case U64: return r.get<uint64_t>();
+        case I64: return (uint64_t) r.get<int64_t>();
+        case BOOL: return r.get<uint8_t>();
+        case F32: return (uint64_t) r.get<float>();
+        case F64: return (uint64_t) r.get<double>();
+        default: return 0;
+    }
+}
+
+std::string lower(std::string s) {
+    for (auto & c : s) {
+        c = (char) std::tolower((unsigned char) c);
+    }
+    return s;
+}
+
+}  // namespace
+
+// The vision projector for a model: an "mmproj" .gguf in the same folder.
+// With several, the one whose name shares the longest start with the
+// model's, once "mmproj" and separators are set aside
+// ("mmproj-gemma-4-E4B-f16.gguf" for "gemma-4-E4B_q4_0-it.gguf").
+std::string find_mmproj(const std::string & model_path) {
+    const size_t slash = model_path.find_last_of('/');
+    const std::string dir = model_path.substr(0, slash);
+    const auto key = [](std::string n) {
+        n = lower(n);
+        if (const size_t at = n.find("mmproj"); at != std::string::npos) {
+            n.erase(at, 6);
+        }
+        n.erase(std::remove_if(n.begin(), n.end(), [](char c) { return c == '-' || c == '_' || c == '.'; }), n.end());
+        return n;
+    };
+    const std::string want = key(model_path.substr(slash + 1));
+    std::string best;
+    size_t      best_len = 0;
+    DIR * d = opendir(dir.c_str());
+    if (!d) {
+        return best;
+    }
+    while (dirent * e = readdir(d)) {
+        const std::string n = e->d_name;
+        if (lower(n).find("mmproj") == std::string::npos || n.size() < 6 || lower(n.substr(n.size() - 5)) != ".gguf") {
+            continue;
+        }
+        const std::string k = key(n);
+        size_t common = 0;
+        while (common < k.size() && common < want.size() && k[common] == want[common]) {
+            ++common;
+        }
+        // At least the family's name in common ("gemma4e4b"), so a lone
+        // projector of another model is not paired.
+        if (common >= 5 && common > best_len) {
+            best = dir + "/" + n;
+            best_len = common;
+        }
+    }
+    closedir(d);
+    return best;
+}
+
+namespace {
+
+// Reads a GGUF header from `f` (and closes it). `file_bytes` is the whole
+// file's size when `f` holds only its start; 0 to measure `f`.
+ModelInfo parse_model_info(Reader r, const std::string & path, uint64_t file_bytes) {
+    FILE * f = r.f;
+    ModelInfo m;
+    m.path      = path;
+    m.file_name = path.substr(path.find_last_of('/') + 1);
+    m.name      = m.file_name;
+
+    if (!f && !r.mem) {
+        m.error = "cannot open";
+        return m;
+    }
+    if (r.get<uint32_t>() != 0x46554747u) {  // "GGUF"
+        if (f) {
+            std::fclose(f);
+        }
+        m.error = "not a GGUF file";
+        return m;
+    }
+    r.get<uint32_t>();  // version
+    r.get<uint64_t>();  // tensor count
+    const uint64_t n_kv = r.get<uint64_t>();
+
+    std::map<std::string, uint64_t> ints;  // every scalar, and the largest element of numeric arrays
+    std::map<std::string, std::string> strs;
+    for (uint64_t i = 0; i < n_kv && !r.bad; i++) {
+        const std::string key = r.str();
+        const uint32_t    t   = r.get<uint32_t>();
+        if (t == STRING) {
+            strs[key] = r.str();
+        } else if (t == ARRAY) {
+            const uint32_t et = r.get<uint32_t>();
+            const uint64_t n  = r.get<uint64_t>();
+            if (et == STRING) {
+                for (uint64_t j = 0; j < n && !r.bad; j++) {
+                    r.skip(r.get<uint64_t>());
+                }
+            } else if (n <= 4096) {  // per-layer values, such as head_count_kv
+                uint64_t mx = 0;
+                for (uint64_t j = 0; j < n; j++) {
+                    mx = std::max(mx, read_int(r, et));
+                }
+                ints[key] = mx;
+            } else {
+                r.skip(n * scalar_size(et));  // vocabularies and the like
+            }
+        } else {
+            ints[key] = read_int(r, t);
+        }
+    }
+    if (f) {
+        std::fseek(f, 0, SEEK_END);
+    }
+    m.file_bytes = file_bytes ? file_bytes : f ? (uint64_t) std::ftell(f) : r.size;
+    if (f) {
+        std::fclose(f);
+    }
+    if (r.bad) {
+        m.error = "metadata could not be read";
+        return m;
+    }
+
+    m.arch = strs["general.architecture"];
+    if (!strs["general.name"].empty()) {
+        m.name = strs["general.name"];
+    }
+    const std::string a = m.arch + ".";
+    m.decision = strs[a + "decision.type"];
+    auto num = [&](const std::string & k, uint64_t def = 0) {
+        auto it = ints.find(a + k);
+        return it == ints.end() ? def : it->second;
+    };
+    // block_count includes the MTP blocks some files carry (Qwen 3.8's
+    // UD-Q2_K_XL has 65); they are not part of the main stack.
+    m.n_layer         = (uint32_t) (num("block_count") - num("nextn_predict_layers"));
+    const uint64_t n_head = num("attention.head_count");
+    m.n_head_kv       = (uint32_t) num("attention.head_count_kv", n_head);
+    const uint64_t n_embd = num("embedding_length");
+    const uint64_t head_dim = n_head ? n_embd / n_head : 0;
+    m.key_length      = (uint32_t) num("attention.key_length", head_dim);
+    m.value_length    = (uint32_t) num("attention.value_length", head_dim);
+    m.full_attn_every = (uint32_t) std::max<uint64_t>(1, num("full_attention_interval", 1));
+    m.n_ctx_train     = (uint32_t) num("context_length");
+    m.n_expert        = (uint32_t) num("expert_count");
+
+    // Recurrent layers (Gated DeltaNet, Mamba): a fixed f32 state each,
+    // the recurrent matrix plus the convolution window.
+    const uint64_t inner = num("ssm.inner_size"), state = num("ssm.state_size");
+    if (inner && state) {
+        const uint64_t groups = num("ssm.group_count", 1), conv = num("ssm.conv_kernel", 4);
+        const uint64_t n_rec  = m.n_layer - m.n_kv_layers();
+        m.state_bytes = n_rec * (inner * state + (conv - 1) * (inner + 2 * groups * state)) * 4;
+    }
+    m.ok = m.n_layer > 0;
+    if (!m.ok) {
+        m.error = "no layer count for architecture '" + m.arch + "'";
+    }
+    return m;
+}
+
+}  // namespace
+
+ModelInfo read_model_info(const std::string & path) {
+    Reader r;
+    r.f = std::fopen(path.c_str(), "rb");
+    ModelInfo m = parse_model_info(r, path, 0);
+    m.mmproj = find_mmproj(path);
+    if (!m.mmproj.empty()) {
+        struct stat st = {};
+        m.mmproj_bytes = stat(m.mmproj.c_str(), &st) == 0 ? (uint64_t) st.st_size : 0;
+    }
+    return m;
+}
+
+ModelInfo read_model_header(const std::string & name, const std::string & head, uint64_t file_bytes) {
+    Reader r;
+    r.mem  = head.data();
+    r.size = head.size();
+    return parse_model_info(r, name, file_bytes);
+}
+
+double kv_bytes_per_token(const ModelInfo & m, const std::string & type) {
+    const double per_elem = type == "f16" ? 2.0 : type == "q8_0" ? 34.0 / 32 : 18.0 / 32;  // q4_0
+    return (double) m.n_kv_layers() * m.n_head_kv * (m.key_length + m.value_length) * per_elem;
+}
+
+// Sampling as each model's authors recommend it. Settings the planner works
+// out (context, cache type) are not here.
+const std::vector<Preset> & presets() {
+    static const std::vector<Preset> table = {
+        { "qwen3.8", "Qwen 3.8", "27B hybrid Gated DeltaNet; UD-Q2_K_XL holds 64k context on the GPU",
+          { "--temp", "0.6", "--top-p", "0.95", "--top-k", "20", "--min-p", "0" } },
+        { "qwen3.6", "Qwen 3.6", "MoE 35B-A3B or dense 27B; the MoE decodes fastest",
+          { "--temp", "0.6", "--top-p", "0.95", "--top-k", "20", "--min-p", "0" } },
+        { "qwen3.5", "Qwen 3.5", "hybrid like 3.8; 9B at Q4_K_M leaves room for long context",
+          { "--temp", "0.6", "--top-p", "0.95", "--top-k", "20", "--min-p", "0" } },
+        { "ornith", "Ornith 1.5", "Qwen 3.5 based 9B",
+          { "--temp", "0.6", "--top-p", "0.95", "--top-k", "20", "--min-p", "0" } },
+        { "gemma", "Gemma 4", "12B at Q3_K_M / IQ4_XS, E4B at Q4_0",
+          { "--temp", "1.0", "--top-p", "0.95", "--top-k", "64" } },
+        { "gpt-oss", "gpt-oss", "20B MoE, 3.6B active; MXFP4 is its only size, so context stays short",
+          { "--temp", "1.0", "--top-p", "1.0" }, 16384 },
+        { "granite", "Granite 4.2", "3B and 8B, fast and plain",
+          { "--temp", "0.0" } },
+        { "nemotron", "Nemotron 3 Nano", "hybrid Mamba, 1M context trained",
+          { "--temp", "0.6", "--top-p", "0.95" } },
+        { "mistral", "Mistral", "7B v0.3 and the Small line",
+          { "--temp", "0.15" } },
+        { "llama", "Llama 3", "8B fits at any 4-bit quant",
+          { "--temp", "0.6", "--top-p", "0.9" } },
+    };
+    return table;
+}
+
+const Preset * find_preset(const ModelInfo & m) {
+    if (!m.decision.empty()) {
+        return nullptr;  // no sampling: a decision model reads its answers off one forward pass
+    }
+    const std::string hay = lower(m.file_name + " " + m.name + " " + m.arch);
+    for (const auto & p : presets()) {
+        if (hay.find(p.match) != std::string::npos) {
+            return &p;
+        }
+    }
+    return nullptr;
+}
+
+namespace {
+
+// Sampling flags a preset may carry. A chosen reply style replaces these
+// and leaves any other preset argument in place.
+bool sampling_flag(const std::string & flag) {
+    return flag == "--temp" || flag == "--top-p" || flag == "--top-k" || flag == "--min-p" || flag == "--repeat-penalty";
+}
+
+const char * system_prompt_text(const std::string & id) {
+    if (id == "helpful") {
+        return "You are a helpful assistant. Answer clearly, and say when you are not sure.";
+    }
+    if (id == "concise") {
+        return "Answer in as few words as the question allows.";
+    }
+    if (id == "home") {
+        return "You are ArtemisLM, at home on a PlayStation 5. When a message already includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed, say so. Be direct.";
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const char * kv_force, const RunOptions & run) {
+    Plan p;
+    const Preset * preset = find_preset(m);
+    if (preset && preset->max_ctx) {
+        ctx_cap = std::min(ctx_cap, preset->max_ctx);
+    }
+    // Decision prompts are short; 4k keeps the cache small for the wide batch below.
+    if (!m.decision.empty()) {
+        ctx_cap = std::min<uint32_t>(ctx_cap, 4096);
+    }
+    if (m.n_ctx_train) {
+        ctx_cap = std::min(ctx_cap, m.n_ctx_train);
+    }
+    p.weights_gib = (m.file_bytes + m.mmproj_bytes) / kGiB;
+    p.state_gib   = m.state_bytes / kGiB;
+    // Compute buffers and the CPU side (the title heap shares the pool), plus
+    // one prompt checkpoint of the recurrent state. Calibrated on the console:
+    // Qwen3.8-27B UD-Q2_K_XL at 64k with a q4_0 cache ran with 11.38 GiB free.
+    // ponytail: 0.25 GiB for the image encoder's buffers is a guess; measure on the console.
+    // Decision models (laya, clef, vllm-d3, lfm2-d1-omni) and non-causal image
+    // encoders (mtmd caps an image to the ubatch) need a whole prompt or image in
+    // one ubatch, so they get 2048, the size #13 ran on the console.
+    const bool wide = !m.decision.empty() || !m.mmproj.empty();
+    // shortcut: 0.5 GiB more compute buffer for the 2048 ubatch is a guess; measure on the console.
+    // Flash attention off materialises the score matrix. A wider text batch
+    // grows the compute buffer. Both figures are guesses of the same kind.
+    const bool flash_off = run.flash_attn == "off";
+    const double batch_extra = wide ? 0.0 : run.batch == "wide" ? 0.35 : run.batch == "medium" ? 0.15 : 0.0;
+    // 0.75 GiB is the spare the 27B load was measured with. Tight keeps 0.30
+    // less so a longer context can fit; that path was not measured, and a
+    // load can fail. Roomy keeps 0.35 more. The model still uses the whole
+    // unified heap: -ngl 999 and -fit off do not change.
+    const double spare = run.memory == "tight" ? 0.45 : run.memory == "roomy" ? 1.10 : 0.75;
+    p.reserve_gib = spare + p.state_gib + (m.mmproj.empty() ? 0.0 : 0.25) + (wide ? 0.5 : 0.0) + batch_extra +
+                    (flash_off ? 0.40 : 0.0);
+    const uint32_t slots = run.slots < 1 ? 1 : run.slots > 2 ? 2 : run.slots;
+
+    // The longest context first, and at each length the best cache that fits.
+    static const uint32_t ctxs[]  = { 131072, 65536, 32768, 16384, 8192, 4096 };
+    static const char *   types[] = { "f16", "q8_0", "q4_0" };
+    for (uint32_t ctx : ctxs) {
+        if (ctx > ctx_cap) {
+            continue;
+        }
+        for (const char * t : types) {
+            if (kv_force && std::strcmp(t, kv_force) != 0) {
+                continue;
+            }
+            // f16 only where it is cheap: q8_0 costs nothing measurable in quality.
+            if (!kv_force && std::strcmp(t, "f16") == 0 && ctx > 8192) {
+                continue;
+            }
+            const double kv    = kv_bytes_per_token(m, t) * ctx * slots / kGiB;
+            const double total = p.weights_gib + kv + p.state_gib + p.reserve_gib;
+            if (total <= budget_gib) {
+                p.fits = true;
+                p.ctx = ctx;
+                p.kv_type = t;
+                p.kv_gib = kv;
+                p.total_gib = total;
+                break;
+            }
+        }
+        if (p.fits) {
+            break;
+        }
+    }
+
+    char why[160];
+    if (!p.fits) {
+        p.total_gib = p.weights_gib + p.state_gib + p.reserve_gib;
+        std::snprintf(why, sizeof(why), "needs %.1f GiB with a 4k context; %.1f GiB is free", p.total_gib, budget_gib);
+        p.why = why;
+        return p;
+    }
+    std::snprintf(why, sizeof(why), "%s%uk context, %s cache%s: %.1f of %.1f GiB",
+                  m.decision.empty() ? "" : ("decision model (" + m.decision + "), ").c_str(), p.ctx / 1024,
+                  p.kv_type.c_str(), m.mmproj.empty() ? "" : ", images", p.total_gib, budget_gib);
+    p.why = why;
+
+    // Text models stay at the measured 256/64 batch: a submission that makes
+    // no progress for 10 s loses the device, and a Gated DeltaNet layer loops
+    // over the whole batch in one dispatch. Vision and decision models need
+    // 2048 because an image or a decision prompt has to fit in one ubatch.
+    uint32_t batch_n = 256, ubatch_n = 64;
+    if (wide) {
+        batch_n = ubatch_n = 2048;
+    } else if (run.batch == "medium") {
+        batch_n = 512;
+        ubatch_n = 128;
+    } else if (run.batch == "wide") {
+        batch_n = 1024;
+        ubatch_n = 256;
+    }
+    const char * flash = run.flash_attn == "off" || run.flash_attn == "auto" ? run.flash_attn.c_str() : "on";
+    p.args = { "-m", m.path, "-ngl", "999", "-fit", "off", "-lm", "none",
+               "-c", std::to_string(p.ctx), "-fa", flash, "-ctk", p.kv_type, "-ctv", p.kv_type,
+               "-b", std::to_string(batch_n), "-ub", std::to_string(ubatch_n), "-np", std::to_string(slots),
+               // One prompt checkpoint and no RAM cache: llama-server's defaults
+               // (32 checkpoints, 8 GiB) are for a PC, and the CPU shares this pool.
+               // -ngl 999 and -fit off stay. The model sits on the one device heap,
+               // and the fit step's extra block is what stopped the first 27B load.
+               "-ctxcp", "1", "-cram", "0",
+               "--host", "0.0.0.0", "--port", std::to_string(kChatPort) };
+    if (!m.mmproj.empty()) {
+        p.args.insert(p.args.end(), { "--mmproj", m.mmproj });
+    }
+    const bool override_sampling = run.sampling != "model";
+    if (preset) {
+        for (size_t i = 0; i < preset->args.size(); ++i) {
+            if (override_sampling && sampling_flag(preset->args[i]) && i + 1 < preset->args.size()) {
+                ++i;
+                continue;
+            }
+            p.args.push_back(preset->args[i]);
+        }
+    }
+    // Chat-only. A decision model reads its answer off one forward pass and
+    // has no sampling, no reply cap and no system text.
+    if (m.decision.empty()) {
+        if (run.sampling == "precise") {
+            p.args.insert(p.args.end(), { "--temp", "0.2", "--top-p", "0.9", "--top-k", "40" });
+        } else if (run.sampling == "balanced") {
+            p.args.insert(p.args.end(), { "--temp", "0.7", "--top-p", "0.95", "--top-k", "40" });
+        } else if (run.sampling == "creative") {
+            p.args.insert(p.args.end(), { "--temp", "1.0", "--top-p", "0.95", "--top-k", "100" });
+        }
+        if (run.max_tokens > 0) {
+            p.args.insert(p.args.end(), { "-n", std::to_string(run.max_tokens) });
+        }
+        if (run.reasoning == "on" || run.reasoning == "off") {
+            p.args.insert(p.args.end(), { "--reasoning", run.reasoning });
+        }
+        if (const char * prompt = system_prompt_text(run.system_prompt)) {
+            p.args.insert(p.args.end(), { "-sys", prompt });
+        }
+    }
+    return p;
+}
+
+std::vector<std::string> find_models(const std::vector<std::string> & dirs) {
+    std::vector<std::string> out;
+    for (const auto & d : dirs) {
+        DIR * dir = opendir(d.c_str());
+        if (!dir) {
+            continue;
+        }
+        while (dirent * e = readdir(dir)) {
+            const std::string n = e->d_name;
+            if (n.size() < 6 || lower(n.substr(n.size() - 5)) != ".gguf" || n[0] == '.') {
+                continue;
+            }
+            // Split models: only the first part, which llama.cpp opens.
+            const auto split = n.find("-of-");
+            if (split != std::string::npos && n.find("-00001-of-") == std::string::npos) {
+                continue;
+            }
+            // Vision projectors are not models on their own.
+            if (lower(n).find("mmproj") != std::string::npos) {
+                continue;
+            }
+            out.push_back(d + "/" + n);
+        }
+        closedir(dir);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+}  // namespace ps5lm

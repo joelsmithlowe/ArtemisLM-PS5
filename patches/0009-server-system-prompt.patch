@@ -1,0 +1,72 @@
+ArtemisLM: llama-server accepts -sys and applies it when the request has no system message.
+
+The flag was limited to the CLI and a few other examples, and the server never read params.system_prompt. The console's Home prompt is passed as -sys. A client that already sent a system message, including the chat page, keeps its own.
+
+diff --git a/common/arg.cpp b/common/arg.cpp
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -1782,7 +1782,7 @@
+         [](common_params & params, const std::string & value) {
+             params.system_prompt = value;
+         }
+-    ).set_examples({LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_DIFFUSION, LLAMA_EXAMPLE_MTMD}));
++    ).set_examples({LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_DIFFUSION, LLAMA_EXAMPLE_MTMD, LLAMA_EXAMPLE_SERVER}));
+     add_opt(common_arg(
+         {"--perf"},
+         {"--no-perf"},
+diff --git a/tools/server/server-common.h b/tools/server/server-common.h
+--- a/tools/server/server-common.h
++++ b/tools/server/server-common.h
+@@ -348,6 +348,8 @@ struct server_chat_params {
+     std::string reasoning_budget_message;
+     std::string media_path;
+     bool force_pure_content = false;
++    // From -sys / --system-prompt. Empty when the flag was not passed.
++    std::string system_prompt;
+ };
+ 
+ // used by /completions endpoint
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -1627,7 +1627,8 @@
+                 /* reasoning_budget      */ params_base.sampling.reasoning_budget_tokens,
+                 /* reasoning_budget_msg  */ params_base.sampling.reasoning_budget_message,
+                 /* media_path            */ params_base.media_path,
+-                /* force_pure_content    */ params_base.force_pure_content_parser
++                /* force_pure_content    */ params_base.force_pure_content_parser,
++                /* system_prompt         */ params_base.system_prompt
+             };
+ 
+             {
+diff --git a/tools/server/server-common.cpp b/tools/server/server-common.cpp
+--- a/tools/server/server-common.cpp
++++ b/tools/server/server-common.cpp
+@@ -1332,6 +1332,27 @@ json oaicompat_chat_params_parse(
+     if (!messages.is_array()) {
+         throw std::invalid_argument("Expected 'messages' to be an array");
+     }
++    // -sys is the console's home prompt. A request that already has a system
++    // message keeps it, so the chat page does not get the text twice.
++    // common_json::insert appends an array. It does not take a position.
++    if (!opt.system_prompt.empty()) {
++        bool has_system = false;
++        for (const auto & msg : messages) {
++            if (json_value(msg, "role", std::string()) == "system") {
++                has_system = true;
++                break;
++            }
++        }
++        if (!has_system) {
++            json prefixed = json::array();
++            prefixed.push_back(json::object({
++                {"role", std::string("system")},
++                {"content", opt.system_prompt},
++            }));
++            prefixed.insert(messages);
++            messages = prefixed;
++        }
++    }
+     for (auto & msg : messages) {
+         std::string role = json_value(msg, "role", std::string());
+         if (role != "assistant" && !msg.contains("content")) {

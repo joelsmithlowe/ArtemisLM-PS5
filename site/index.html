@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PS5LM: a model server on your PS5</title>
+<meta name="description" content="PS5LM runs llama.cpp on the PS5's GPU and serves language and decision models to every device on your network, with OpenAI and Anthropic APIs and a screen made for the TV.">
+<meta name="theme-color" content="#0e0e14">
+<link rel="canonical" href="https://ps5lm.cobanov.dev/">
+<link rel="icon" type="image/png" href="/media/favicon.png">
+<link rel="apple-touch-icon" href="/media/icon.png">
+<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/recursive-sans-v1.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/recursive-mono-v1.woff2" crossorigin>
+<link rel="stylesheet" href="/assets/style.css?v=3">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ps5lm.cobanov.dev/">
+<meta property="og:title" content="PS5LM: a model server on your PS5">
+<meta property="og:description" content="llama.cpp on the PS5's GPU: Qwen 3.5 9B at 55 tokens a second, decision models powered by Ollaya, OpenAI and Anthropic APIs. Open source, GPL-3.0.">
+<meta property="og:image" content="https://ps5lm.cobanov.dev/media/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap nav">
+    <a class="brand" href="/"><img src="/media/icon.png" width="28" height="28" alt=""><span>PS5<em>LM</em></span></a>
+    <span class="nav-spacer"></span>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#screens">The app</a>
+      <a href="#features">Features</a>
+      <a href="#decisions">Decisions</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn" href="https://github.com/cobanov/PS5LM">GitHub</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <a class="pill" href="#decisions"><b>New</b> Decision models, powered by Ollaya</a>
+      <h1 class="display">Your PS5 runs the language model.<br><span>Every device on your network uses it.</span></h1>
+      <p class="lede">PS5LM loads a GGUF model onto the console's GPU and serves it to your laptop, your phone and your coding tools, with OpenAI and Anthropic APIs and a screen made for the TV. No PC while it runs, no cloud, no account.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/cobanov/PS5LM/releases/latest">Get the app</a>
+        <a class="btn" href="https://github.com/cobanov/PS5LM">Source on GitHub</a>
+      </div>
+      <p class="hero-note">Free and open source under GPL-3.0, for a jailbroken PS5 you own on firmware 7.00 to 13.60.</p>
+      <figure class="demo">
+        <video id="demo" src="/media/ps5lm-home.mp4" poster="/media/poster.jpg" muted loop playsinline preload="metadata"
+          aria-label="A PS5 on a TV: PS5LM's Home screen shows Qwen 3.5 9B generating at 52 tokens a second while requests from a laptop stream in."></video>
+        <figcaption>Qwen 3.5 9B answering requests from a laptop on a PS5 Slim.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="numbers">
+    <div class="wrap">
+      <h2>Measured on the console</h2>
+      <div class="grid stats">
+        <div class="stat"><p class="value">207<small>tok/s</small></p><p>Qwen 3.5 0.8B, Q4_K_M</p></div>
+        <div class="stat"><p class="value">55<small>tok/s</small></p><p>Qwen 3.5 9B, Q4_K_M, with a 64k context</p></div>
+        <div class="stat"><p class="value">20<small>tok/s</small></p><p>Qwen 3.8 27B, UD-Q2_K_XL, the biggest that fits</p></div>
+        <div class="stat"><p class="value">0.3<small>s</small></p><p>Three decisions from d1 Omni 600M; a 720p image and seven questions in 2.9 s</p></div>
+      </div>
+      <p class="note">A PS5 Slim, every layer on its RDNA 2 GPU through llama.cpp's Vulkan backend, with 11.4 GB of the shared memory for the model and its context.</p>
+    </div>
+  </section>
+
+  <section id="screens">
+    <div class="wrap">
+      <h2>Made for the TV</h2>
+      <p>Five pages you move between with L1 and R1. Everything is in reach of the DualSense, and every request another device makes shows up on Home as it happens.</p>
+      <div class="shots">
+        <figure><img src="/media/app/home.jpg" width="1600" height="900" loading="lazy" alt="Home: the model, its speed, and the requests as a chat"><figcaption><b>Home</b> The model, its speed, and every request and its answer as a chat. Square sends a demo, Triangle opens a keyboard.</figcaption></figure>
+        <figure><img src="/media/app/models.jpg" width="1600" height="900" loading="lazy" alt="Models: suggested models measured on the console"><figcaption><b>Models</b> What is on this PS5, models measured on the console, Hugging Face search and downloads.</figcaption></figure>
+        <figure><img src="/media/app/home-decision.jpg" width="1600" height="900" loading="lazy" alt="Home with a decision model loaded"><figcaption><b>Decisions</b> With a decision model, Home shows the time per decision and each answer.</figcaption></figure>
+        <figure><img src="/media/app/console.jpg" width="1600" height="900" loading="lazy" alt="Console: temperature, power, GPU and CPU charts"><figcaption><b>Console</b> Temperature, power, GPU and CPU over the last two minutes or the last hour.</figcaption></figure>
+        <figure><img src="/media/app/api.jpg" width="1600" height="900" loading="lazy" alt="API: the endpoints and an example"><figcaption><b>API</b> The address, the endpoints and a request to copy.</figcaption></figure>
+        <figure><img src="/media/app/settings.jpg" width="1600" height="900" loading="lazy" alt="Settings with a list of choices under a row"><figcaption><b>Settings</b> Startup, context and cache, storage, and the logs under Diagnostics.</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>A model server under your TV</h2>
+      <div class="grid cards">
+        <div class="card"><h3>It runs on the GPU</h3><p>llama.cpp's Vulkan backend on the console's RDNA 2 GPU. Every architecture and quantization llama.cpp knows comes along.</p></div>
+        <div class="card"><h3>It answers your network</h3><p>OpenAI's <code>/v1/chat/completions</code>, Anthropic's <code>/v1/messages</code> (Claude Code works against it) and a chat page in any browser, at <code>http://&lt;console&gt;:8081</code>.</p></div>
+        <div class="card"><h3>It decides, too</h3><p>Load a decision model and the console answers <code>/v1/systemone</code>: choice, score and yes-or-no questions about text and images.</p></div>
+        <div class="card"><h3>It shows its work</h3><p>Every request streams across the TV as a chat: which device asked, what it asked, and the reply as it is written.</p></div>
+        <div class="card"><h3>It watches the console</h3><p>Charts of temperature, power and load, beside a table of every reading the console gives.</p></div>
+        <div class="card"><h3>It picks what fits</h3><p>The planner reads each GGUF and gives it the longest context and best cache that fit. Downloads go to internal storage, the M.2 drive or USB.</p></div>
+        <div class="card"><h3>It reads images</h3><p>Models with an image projector, such as Gemma 4, MiniCPM-V and d1, take pictures in chat and in decisions.</p></div>
+        <div class="card"><h3>It needs nothing else</h3><p>No PC while it runs, no cloud and no account. Your prompts never leave your home.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <div class="wrap">
+      <p class="eyebrow">Powered by <a href="https://ollaya.dev">Ollaya</a></p>
+      <h2>Decision models</h2>
+      <p><a href="https://github.com/ollaya-dev/ollaya">Ollaya</a> runs open decision models on a PC the way Ollama runs language models. PS5LM brings the same idea to the console: a decision model reads a state and answers typed questions in one forward pass, with calibrated probabilities and no text generated.</p>
+      <pre class="panel"><code><span class="dim">$</span> curl http://&lt;console&gt;:8081/v1/systemone -H 'Content-Type: application/json' -d '{
+  "state": "I was charged twice this month. Refund me or I cancel.",
+  "questions": {
+    "intent": {"type": "choice", "instructions": "What does the customer want?",
+               "criteria": {"refund": null, "information": null, "cancel": null}},
+    "angry":  {"type": "noul", "instructions": "Is the customer angry?"}
+  }
+}'</code></pre>
+      <p>The Suggested list has d1 Omni 600M, d1 3B and Clef Flash. Any GGUF that carries llama.cpp's decision metadata loads the same way, and the app labels it a decision model.</p>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p>You need a PS5 on firmware 7.00 to 13.60, jailbroken, with these payloads loaded:</p>
+      <div class="table">
+        <table>
+          <thead><tr><th>Payload</th><th>For</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://github.com/EchoStretch/kstuff-lite">kstuff-lite</a></td><td>the kernel patches homebrew runs on</td><td>required</td></tr>
+            <tr><td><a href="https://github.com/etaHEN/etaHEN">etaHEN</a></td><td>homebrew support</td><td>required</td></tr>
+            <tr><td><a href="https://github.com/drakmor/ShadowMountPlus">ShadowMountPlus</a></td><td>puts PS5LM on the home screen from <code>/data/homebrew</code></td><td>required</td></tr>
+            <tr><td><a href="https://github.com/ps5-payload-dev/elfldr">elfldr</a></td><td>temperature, power and real free space</td><td>recommended</td></tr>
+            <tr><td><a href="https://github.com/ps5-payload-dev/ftpsrv">ftpsrv</a></td><td>installing the app, copying models from a PC</td><td>recommended</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ol class="steps-list">
+        <li>Download <code>ps5lm-app-vX.Y.Z.zip</code> from the <a href="https://github.com/cobanov/PS5LM/releases/latest">latest release</a> and unzip it.</li>
+        <li>Copy the <code>PPSA99575</code> folder to <code>/data/homebrew</code> over FTP. ShadowMountPlus adds <strong>PS5LM</strong> to the home screen.</li>
+        <li>Open PS5LM, go to <strong>Models &gt; Suggested</strong> and get a model. Or copy a <code>.gguf</code> to <code>/data/PS5LM/models</code>, or to <code>PS5LM/models</code> on a USB drive.</li>
+        <li>Load it. Once Home says Ready, open <code>http://&lt;console&gt;:8081</code> in a browser, or point your OpenAI or Anthropic client at it.</li>
+      </ol>
+      <p>To update, copy the new folder over the old one; settings, models and downloads stay in <code>/data/PS5LM</code>. Using it from coding tools (opencode, Codex, Claude Code) is in <a href="https://github.com/cobanov/PS5LM/blob/main/docs/CLI.md">docs/CLI.md</a>, building it in <a href="https://github.com/cobanov/PS5LM/blob/main/docs/BUILDING.md">docs/BUILDING.md</a>.</p>
+    </div>
+  </section>
+
+  <section id="faq" class="faq">
+    <div class="wrap">
+      <h2>Questions</h2>
+      <h3>Does it run on the GPU?</h3>
+      <p>Yes, every layer. llama.cpp's Vulkan backend runs on RADV, the open Mesa driver, ported to the PS5 by PS5_Vulkan. Generation is bound by memory bandwidth, and the 9B model reads its weights at about 70% of the GPU's 448 GB/s.</p>
+      <h3>How big a model can it run?</h3>
+      <p>About 11 GB of model and context. Qwen 3.8 27B at 2-bit fits with a 64k context; a 9B at 4-bit fits with room to spare. The planner tells you what fits before you download.</p>
+      <h3>Does this run games or need any Sony code?</h3>
+      <p>No. PS5LM runs open-weight models and nothing else. No games, keys, firmware or Sony SDK files are part of it.</p>
+      <h3>Can it break my console?</h3>
+      <p>It writes only to its own folders, never to system files. Under a long load the console runs warm and the fan spins up, as it does in a game; the Console page shows both.</p>
+      <h3>Is it the same as PS5LM Plus?</h3>
+      <p>PS5LM grew from PS5LM Plus, the native GPU app by abhi245y, and now lives under its own title ID, PPSA99575, so the two install side by side.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-row">
+      <span>PS5LM, by <a href="https://cobanov.dev">Mert Cobanov</a></span>
+      <a href="https://github.com/cobanov/PS5LM">GitHub</a>
+      <a href="https://ollaya.dev">Ollaya</a>
+      <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>
+      <a href="https://github.com/mihawk-99/PS5_Vulkan">PS5_Vulkan</a>
+      <a href="https://github.com/blackbearreloaded/ps5-homebrew-ui">ps5-homebrew-ui</a>
+    </div>
+    <p>PS5LM is not affiliated with Sony Interactive Entertainment. PlayStation and PS5 are its trademarks.</p>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var video = document.getElementById('demo');
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still) {
+      video.setAttribute('controls', '');
+      return;
+    }
+    video.autoplay = true;
+    var p = video.play();
+    if (p && p.catch) p.catch(function () { video.setAttribute('controls', ''); });
+    video.addEventListener('click', function () { if (video.paused) video.play(); else video.pause(); });
+  })();
+</script>
+</body>
+</html>

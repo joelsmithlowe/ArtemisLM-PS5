@@ -1,0 +1,17 @@
+Interface sounds from PocketVibe (MIT, Copyright (c) 2026 Mert Cobanov), made by its
+tools/sfx/make_sfx.py: procedural glass-mallet tones, all in D major. Converted to
+48 kHz mono and named after ps5-homebrew-ui's cues, one sound for each kind of action
+(the list is at the top of ps5/app/dashboard.cpp):
+
+  focus_01.wav        nav_move       the highlight moved
+  error_01.wav        nav_edge x0.6  it cannot
+  tab_01.wav          tab_switch     another page or view
+  select_01.wav       confirm        went in, or did it
+  back_01.wav         back           came out, or cancelled
+  modal_open_01.wav   menu_open      a question or a list of choices
+  modal_close_01.wav  menu_close     ... closed without an answer
+  toggle_01.wav       toggle_on      a switch flipped
+  launch_01.wav       launch_game    a model starts loading
+  notify_01.wav       notification   a model is ready
+  complete_01.wav     save_done      a download is saved
+  type_01.wav         key_type       a key on the message keyboard

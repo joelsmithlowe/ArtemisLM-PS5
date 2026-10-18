@@ -1,0 +1,89 @@
+# Changelog
+
+ArtemisLM 0.9.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-app-v0.9.0.zip`.
+`contentVersion` stays `01.009.000`, so the console does not offer a system
+update. A newer release installs from Settings, or by copying the `PPSA98010`
+folder over the installed one.
+
+This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
+this tree. PS5LM's own release history is not repeated here.
+
+## [0.9.0] - 2026-10-18
+
+### Added
+
+- Its own install, title PPSA98010, content id
+  `UP9000-PPSA98010_00-ARTEMISLM0000001`. PS5LM and PS5LM Plus can stay
+  installed. They keep using `/data/PS5LM/models`.
+- A home folder at `/data/ArtemisLM`. The first launch creates that folder,
+  `/data/ArtemisLM/models`, and `/data/ArtemisLM/cache`.
+- The library always reads `/data/ArtemisLM/models`. It also reads
+  `/data/PS5LM/models`, the same PS5LM folder on an M.2 or USB drive,
+  `ArtemisLM/models` on those drives, and a loose `.gguf` in the USB root.
+  Settings can add one more absolute folder under `/data` or `/mnt`.
+- A model found outside the home folder can stay where it is, be moved when
+  asked, or be moved on the next scan. A move copies the model, its projector
+  and the other parts of a split file, then removes the old copy. The loaded
+  model is left alone. One model can be deleted from the TV or the browser.
+  The copy leaves 1 GiB free. A file already in the home folder at the same
+  size is not copied again.
+- Library, Hugging Face search and Settings on the phone and desktop page.
+  That API is on port 47282. Chat stays on 47281. A download goes to the folder
+  chosen in Settings, which defaults to `/data/ArtemisLM/models`. The page
+  lists each installed model and what it can do.
+- With no model loaded, port 47281 still serves that page. Library can
+  download a model, and Settings can add a folder. Loading a model restarts
+  the app onto that model, and the chat API comes back.
+- Chat and the OpenAI and Anthropic APIs listen on port 47281. The library
+  listens on 47282. The paths are the same. Port 47282 also lists models at
+  `/v1/models`, describes the app at `/artemis`, and accepts `/load` and
+  `/unload`. The page can load a model from Library. The page draws a paper
+  plane on the phone or computer, and Home draws the same kind of ring while
+  nothing is loaded. Neither one takes memory from the model.
+- A calculator for a plain sum, on the TV and in the browser. A question that
+  names two currencies also reads the European Central Bank rate.
+- Web search also runs for stock, score, forecast, population and bitcoin,
+  with weather, price, rate and the currency codes.
+- The app checks GitHub at launch for a newer release of this repository.
+  Settings, Sound and storage, App update, or the phone page, downloads that
+  zip, checks its checksum, and installs it into `/data/homebrew/PPSA98010`,
+  then restarts. Models and settings in `/data/ArtemisLM` stay. The first copy
+  of the title folder still has to be placed there. A zip with a bad path or
+  a bad checksum is refused.
+- Settings on the TV and on the phone page for flash attention, context cap,
+  cache type, prompt batch, slots, sampling, reply length, reasoning, the
+  system prompt, and the library switches above.
+- Credits on the console, and an icon of a paper plane on a trail of code.
+
+### Performance
+
+- The model stays on the GPU. The launch flags stay `-ngl 999`, `-fit off`,
+  `-lm none`, flash attention on, `-ctxcp 1` and `-cram 0`. That is the path
+  measured with the 27B load. There is no layer slider, and the process does
+  not lock memory or turn mmap off.
+- Memory spare is now a setting. Measured keeps 0.75 GiB, the spare from that
+  test, and it is the default. Tight keeps 0.45 GiB so a longer context can
+  fit. Tight was not measured here, and a load can fail. Roomy keeps 1.10 GiB.
+  None of the three moves a layer off the GPU.
+- Prompt batch Safe is 256 tokens with a 64-token ubatch, the size a
+  submission on this GPU finishes. Medium is 512/128 and Wide is 1024/256. A
+  wider text batch can stall the device. Vision and decision models stay at
+  2048, because an image or a decision prompt has to fit in one ubatch.
+- The CPU uses the cores the console allows, minus two. Using every allowed
+  core has shut the console down, so that count was left as it is.
+
+### Fixed
+
+- A question about today, a price or a rate calls the clock and then web
+  search, on the TV and in the browser. A search that leaves the year out
+  gets the console's date on the query.
+- The Home system prompt is passed with `-sys` and applied when the request
+  has no system message of its own. A client that already sent one keeps it.
+- Source paths in the release binary are inside the project. The machine that
+  built the package is not named in it.
+
+### Unchanged
+
+- A decision model can still stop answering after a long run of requests.
+  Language models are not affected. Restart the app or load the model again.

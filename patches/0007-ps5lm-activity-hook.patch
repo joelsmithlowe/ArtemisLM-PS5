@@ -1,0 +1,82 @@
+diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
+index 7ac78f9..c791d20 100644
+--- a/tools/server/server-http.cpp
++++ b/tools/server/server-http.cpp
+@@ -52,6 +52,16 @@ server_http_context::~server_http_context() {
+     }
+ }
+ 
++// PS5LM: the app shows each request and what was answered on the TV. It
++// defines these; any other build leaves them null and nothing is called.
++extern "C" {
++__attribute__((weak)) void ps5lm_activity_begin(int id, const char * method, const char * path, const char * remote,
++                                                const char * body, size_t body_len);
++__attribute__((weak)) void ps5lm_activity_data(int id, const char * data, size_t len);
++__attribute__((weak)) void ps5lm_activity_end(int id, int status);
++}
++static std::atomic<int> ps5lm_activity_next{ 0 };
++
+ static void log_server_request(const httplib::Request & req, const httplib::Response & res) {
+     // skip logging requests that are regularly sent, to avoid log spam
+     if (req.path == "/health"
+@@ -649,7 +659,8 @@ static std::string build_query_string(const httplib::Request & req) {
+ // using unique_ptr for request to allow safe capturing in lambdas
+ using server_http_req_ptr = std::unique_ptr<server_http_req>;
+ 
+-static void process_handler_response(server_http_req_ptr && request, server_http_res_ptr & response, httplib::Response & res) {
++static void process_handler_response(server_http_req_ptr && request, server_http_res_ptr & response, httplib::Response & res,
++                                     int activity = -1) {
+     if (response->is_stream()) {
+         res.status = response->status;
+         // Tell Nginx to not buffer any streamed response
+@@ -660,9 +671,12 @@ static void process_handler_response(server_http_req_ptr && request, server_http
+         std::shared_ptr<server_http_req> q_ptr = std::move(request);
+         std::shared_ptr<server_http_res> r_ptr = std::move(response);
+ 
+-        const auto chunked_content_provider = [response = r_ptr](size_t, httplib::DataSink & sink) -> bool {
++        const auto chunked_content_provider = [response = r_ptr, activity](size_t, httplib::DataSink & sink) -> bool {
+             std::string chunk;
+             const bool has_next = response->next(chunk);
++            if (!chunk.empty() && activity >= 0 && ps5lm_activity_data) {
++                ps5lm_activity_data(activity, chunk.data(), chunk.size());
++            }
+             if (!chunk.empty()) {
+                 if (!sink.write(chunk.data(), chunk.size())) {
+                     return false;
+@@ -675,7 +689,10 @@ static void process_handler_response(server_http_req_ptr && request, server_http
+             }
+             return has_next;
+         };
+-        const auto on_complete = [request = q_ptr, response = r_ptr](bool) mutable {
++        const auto on_complete = [request = q_ptr, response = r_ptr, activity](bool) mutable {
++            if (activity >= 0 && ps5lm_activity_end) {
++                ps5lm_activity_end(activity, response->status);
++            }
+             response->on_complete();
+             response.reset();
+             request.reset();
+@@ -685,6 +702,10 @@ static void process_handler_response(server_http_req_ptr && request, server_http
+         res.status = response->status;
+         set_headers(res, response->headers);
+         res.set_content(response->data, response->content_type);
++        if (activity >= 0 && ps5lm_activity_data && ps5lm_activity_end) {
++            ps5lm_activity_data(activity, response->data.data(), response->data.size());
++            ps5lm_activity_end(activity, response->status);
++        }
+         response->on_complete();
+     }
+ }
+@@ -752,8 +773,12 @@ void server_http_context::post(const std::string & path, const server_http_conte
+             std::move(files),
+             req.is_connection_closed
+         });
++        const int activity = ps5lm_activity_begin ? ps5lm_activity_next++ : -1;
++        if (activity >= 0) {
++            ps5lm_activity_begin(activity, "POST", req.path.c_str(), req.remote_addr.c_str(), body.data(), body.size());
++        }
+         server_http_res_ptr response = handler(*request);
+-        process_handler_response(std::move(request), response, res);
++        process_handler_response(std::move(request), response, res, activity);
+     };
+     const std::string full_path = path_prefix + path;
+     for (const auto & srv : pimpl->servers) {

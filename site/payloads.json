@@ -1,0 +1,14 @@
+[
+  {
+    "name": "PS5LM",
+    "filename": "PS5LM_v0.1.1.elf",
+    "url": "https://github.com/cobanov/PS5LM/releases/download/v0.1.1/ps5lm.elf",
+    "source": "https://github.com/cobanov/PS5LM/releases",
+    "source_direct": "https://github.com/cobanov/PS5LM/releases/download/v0.1.1/ps5lm.elf",
+    "description": "Run local LLMs (llama.cpp) on your PS5: download a model on the console and chat in the browser",
+    "last_update": "2026-10-02",
+    "version": "v0.1.1",
+    "category": "Utilities & Tools",
+    "checksum": "10ee1a913e2d534fc81e1822e5969a6d70740ff88f4eb7c8fe98789d22152126"
+  }
+]

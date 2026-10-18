@@ -1,0 +1,212 @@
+PS5LM: add get_datetime, web_search and web_fetch to llama-server's tools, and make get_info work without spawning a process.
+
+A title cannot start Python, curl or an MCP server. The search runs in the app through libSceHttp2 (ps5lm_web_search, ps5lm_web_fetch). The clock is read here. get_info used to run uname, which a title cannot do.
+
+diff --git a/tools/server/server-tools.cpp b/tools/server/server-tools.cpp
+--- a/tools/server/server-tools.cpp
++++ b/tools/server/server-tools.cpp
+@@ -13,6 +13,7 @@
+ #include <cctype>
+ #include <cstdint>
+ #include <cstdlib>
++#include <ctime>
+ #include <algorithm>
+ #include <iterator>
+ #include <unordered_set>
+@@ -1721,6 +1722,19 @@
+     }
+ 
+     json invoke(json params, server_tool::stream *) const override {
++#if defined(__PROSPERO__)
++        // A PS5 title cannot start a process: fork returns ENOSYS, and
++        // there is no uname. Report the console and the real directory.
++        std::string cwd = json_value(params, "cwd", std::string());
++        if (cwd.empty()) {
++            std::error_code ec;
++            cwd = path_to_utf8(fs::current_path(ec));
++            if (ec || cwd.empty()) {
++                cwd = "unknown";
++            }
++        }
++        return {{"os", "PlayStation 5"}, {"cwd", cwd}};
++#else
+         auto io = make_tools_io(params);
+ 
+         // inside an isolate, we always use the linux command
+@@ -1752,6 +1766,165 @@
+             {"os",  os_info},
+             {"cwd", cwd},
+         };
++#endif
++    }
++};
++
++
++//
++// PS5LM: the clock, web search and opening one page.
++//
++// Upstream keeps this file to file and shell tools, and puts the clock in
++// the web UI. A PS5 title cannot start Python, curl or an MCP server, and
++// the UI's clock does not run for an API client, so these three live here.
++// Search and fetch are implemented in the app (libSceHttp2). A build that
++// does not define the hooks answers with an error instead of crashing.
++//
++
++extern "C" {
++__attribute__((weak)) int ps5lm_web_search(const char * query, int num_results, char * out, size_t out_cap);
++__attribute__((weak)) int ps5lm_web_fetch(const char * url, char * out, size_t out_cap);
++}
++
++struct server_tool_get_datetime : server_tool {
++    server_tool_get_datetime() {
++        name = "get_datetime";
++        display_name = "Date and time";
++        permission_write = false;
++    }
++
++    json get_definition() const override {
++        return {
++            {"type", "function"},
++            {"function", {
++                {"name", name},
++                {"description",
++                    "Return the console's current local date and time. "
++                    "Call this when the user asks what time or day it is, or when an answer depends on today's date. "
++                    "The clock is the console's own, not a network time service."},
++                {"parameters", {
++                    {"type", "object"},
++                    {"properties", json::object()},
++                    {"required", json::array()},
++                }},
++            }},
++        };
++    }
++
++    json invoke(json params, server_tool::stream *) const override {
++        (void) params;
++        const std::time_t now = std::time(nullptr);
++        std::tm tm{};
++#if defined(_WIN32)
++        if (localtime_s(&tm, &now) != 0) {
++            return {{"error", "the clock could not be read"}};
++        }
++#else
++        if (!localtime_r(&now, &tm)) {
++            return {{"error", "the clock could not be read"}};
++        }
++#endif
++        char iso[64], human[96];
++        if (!std::strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%S%z", &tm)) {
++            return {{"error", "the clock could not be read"}};
++        }
++        std::strftime(human, sizeof(human), "%A, %d %B %Y, %H:%M:%S %Z", &tm);
++        return {{"datetime", iso}, {"local", human}, {"unix", (int64_t) now}};
++    }
++};
++
++struct server_tool_web_search : server_tool {
++    server_tool_web_search() {
++        name = "web_search";
++        display_name = "Web search";
++        permission_write = false;
++    }
++
++    json get_definition() const override {
++        return {
++            {"type", "function"},
++            {"function", {
++                {"name", name},
++                {"description",
++                    "Search the public web and return titles, links and short snippets. "
++                    "Call this for news, current facts, prices, or anything that may be newer than your training. "
++                    "Then call web_fetch on a link when the snippet is not enough."},
++                {"parameters", {
++                    {"type", "object"},
++                    {"properties", {
++                        {"query", {{"type", "string"}, {"description", "The search query"}}},
++                        {"num_results", {{"type", "integer"}, {"description", "How many results to return, from 1 to 8. Defaults to 5"}}},
++                    }},
++                    {"required", json::array({"query"})},
++                }},
++            }},
++        };
++    }
++
++    json invoke(json params, server_tool::stream *) const override {
++        if (!ps5lm_web_search) {
++            return {{"error", "web search is not built into this server"}};
++        }
++        const std::string query = json_value(params, "query", std::string());
++        if (query.empty()) {
++            return {{"error", "query is required"}};
++        }
++        int n = json_value(params, "num_results", 5);
++        if (n < 1) {
++            n = 1;
++        }
++        if (n > 8) {
++            n = 8;
++        }
++        // On the heap: the console's default thread stack is small.
++        std::string buf(24 * 1024, '\0');
++        if (ps5lm_web_search(query.c_str(), n, buf.data(), buf.size()) != 0) {
++            return {{"error", std::string(buf.c_str())}};
++        }
++        return {{"results", std::string(buf.c_str())}};
++    }
++};
++
++struct server_tool_web_fetch : server_tool {
++    server_tool_web_fetch() {
++        name = "web_fetch";
++        display_name = "Open page";
++        permission_write = false;
++    }
++
++    json get_definition() const override {
++        return {
++            {"type", "function"},
++            {"function", {
++                {"name", name},
++                {"description",
++                    "Open one http or https page and return its text, trimmed to a few thousand characters. "
++                    "Use it on a link from web_search when the snippet is not enough. "
++                    "The address must not contain a password."},
++                {"parameters", {
++                    {"type", "object"},
++                    {"properties", {
++                        {"url", {{"type", "string"}, {"description", "The http or https address to open"}}},
++                    }},
++                    {"required", json::array({"url"})},
++                }},
++            }},
++        };
++    }
++
++    json invoke(json params, server_tool::stream *) const override {
++        if (!ps5lm_web_fetch) {
++            return {{"error", "opening pages is not built into this server"}};
++        }
++        const std::string url = json_value(params, "url", std::string());
++        if (url.empty()) {
++            return {{"error", "url is required"}};
++        }
++        std::string buf(24 * 1024, '\0');
++        if (ps5lm_web_fetch(url.c_str(), buf.data(), buf.size()) != 0) {
++            return {{"error", std::string(buf.c_str())}};
++        }
++        return {{"text", std::string(buf.c_str())}};
+     }
+ };
+ 
+@@ -1961,6 +2134,10 @@
+     tools.push_back(std::make_unique<server_tool_write_file>());
+     tools.push_back(std::make_unique<server_tool_edit_file>());
+     tools.push_back(std::make_unique<server_tool_get_info>());
++    // PS5LM: clock and web tools. See server_tool_get_datetime above.
++    tools.push_back(std::make_unique<server_tool_get_datetime>());
++    tools.push_back(std::make_unique<server_tool_web_search>());
++    tools.push_back(std::make_unique<server_tool_web_fetch>());
+     return tools;
+ }
+ 
