@@ -155,6 +155,9 @@ RunOptions run_options(const Settings & s) {
     r.reasoning = s.reasoning;
     r.system_prompt = s.system_prompt;
     r.memory = s.memory;
+    r.repeat_penalty = s.repeat_penalty;
+    r.min_p = s.min_p;
+    r.seed = s.seed;
     return r;
 }
 constexpr const char * kLlamaLog    = "/data/ArtemisLM/llama.log";
@@ -1069,7 +1072,8 @@ int main(int, char **) {
         }
         switch (req.kind) {
             case Dashboard::Request::ask:
-                ask_self(kPort, req.path, !live.decision.empty(), models.settings.datetime, models.settings.web_search);
+                ask_self(kPort, req.path, !live.decision.empty(), models.settings.datetime, models.settings.web_search,
+                         (int) models.settings.search_hits, models.settings.agent, (int) models.settings.plan_tokens);
                 break;
             case Dashboard::Request::market_search: market.search(req.path); break;
             case Dashboard::Request::market_open: market.open_repo(req.repo); break;

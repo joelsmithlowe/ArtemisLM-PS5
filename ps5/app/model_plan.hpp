@@ -89,6 +89,11 @@ struct RunOptions {
     std::string reasoning  = "auto";   // "auto", "on" or "off"
     std::string system_prompt = "none";  // "none", "helpful", "concise" or "home"
     std::string memory = "measured";     // "measured", "tight" or "roomy"; the GPU flags stay
+    // Extra sampling. "off" and "random" add no flag, so the measured launch
+    // stays as it was. None of these changes the GPU flags.
+    std::string repeat_penalty = "off";  // "off", "light", "medium" or "strong"
+    std::string min_p = "off";           // "off", "0.05" or "0.10"
+    std::string seed = "random";         // "random", "42", "7" or "1234"
 };
 
 // budget_gib: device memory free before loading (the app reads it from ggml).

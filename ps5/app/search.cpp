@@ -381,7 +381,7 @@ extern "C" int ps5lm_web_fetch(const char * url, char * out, size_t out_cap) {
 
 namespace ps5lm {
 
-LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on) {
+LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on, int search_hits) {
     LiveFacts f;
     const LiveKind kind = classify(question);
     if (kind == LiveKind::none) {
@@ -418,7 +418,8 @@ LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on) {
             query += " " + f.day;
         }
         std::string buf(24 * 1024, '\0');
-        ps5lm_web_search(query.c_str(), 5, buf.data(), buf.size());
+        const int hits = search_hits == 3 || search_hits == 8 ? search_hits : 5;
+        ps5lm_web_search(query.c_str(), hits, buf.data(), buf.size());
         f.search = buf.c_str();
         if (f.search.empty()) {
             f.search = "no results";

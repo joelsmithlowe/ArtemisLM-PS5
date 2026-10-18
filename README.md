@@ -23,7 +23,9 @@ where it is, or be moved home and the old file removed.
 The chat reads the console clock, searches the web, and works out a plain sum before it asks the
 model. A research question also reads the text of one page. Settings on the television and on the
 phone page cover context, flash attention, the prompt batch, and how much spare memory to keep.
-Measured is the spare this console was tested with.
+Measured is the spare this console was tested with. Agent mode names a coordinator and a worker.
+The console keeps one model on the GPU. Plan writes a short plan and then the answer on the loaded
+model. Hand off, from the page, restarts onto the worker after the plan.
 
 <p align="center">
   <img src="docs/media/artemislm-ps5-mark.gif" width="720" alt="ArtemisLM PS5">

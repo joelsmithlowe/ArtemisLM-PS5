@@ -84,7 +84,8 @@ constexpr int          kMarketChipCount = 7;
 enum class Setting : int {
     auto_load, default_model, ctx_cap, kv_type, flash_attn, batch, slots, sampling, max_tokens, reasoning,
     system_prompt, sounds, tools, web_search, datetime, scratch_limit, clear_scratch, download_dir,
-    scan_ps5lm, scan_usb, migrate, move_now, memory, app_update
+    scan_ps5lm, scan_usb, migrate, move_now, memory, app_update, agent, coordinator, worker, plan_tokens,
+    repeat_penalty, min_p, seed, remember, search_hits
 };
 
 struct SettingRow {
@@ -95,7 +96,7 @@ struct SettingRow {
 
 struct SettingCategory {
     const char * name;
-    SettingRow   rows[6];
+    SettingRow   rows[7];
     int          count;
 };
 
@@ -122,15 +123,26 @@ constexpr SettingCategory kCategories[] = {
       { { Setting::sampling, "Reply style", "Model keeps the family's own settings. The others replace them" },
         { Setting::max_tokens, "Reply length", "Where a reply stops. Unlimited lets the model decide" },
         { Setting::reasoning, "Reasoning", "On asks a thinking model to show its work. Auto follows the model" },
-        { Setting::system_prompt, "System prompt", "Sent with every chat. Home mentions the console and its tools" } },
-      4 },
+        { Setting::system_prompt, "System prompt", "Sent with every chat. Home mentions the console and its tools" },
+        { Setting::repeat_penalty, "Repeat penalty", "Nudges the reply away from repeating itself. Applies at the next load" },
+        { Setting::min_p, "Minimum probability", "Drops the unlikely tail of the next word. Applies at the next load" },
+        { Setting::seed, "Seed", "Random is a new reply each time. A number repeats the same prompt" } },
+      7 },
     { "Chat",
       { { Setting::tools, "File tools", "Scratch, projects, a USB or M.2 listing, and short notes. A note is used only when the question matches" },
         { Setting::web_search, "Web search", "The chat may search the web and open a page. A research question reads one page" },
         { Setting::datetime, "Date and time", "The chat may read the console's clock" },
         { Setting::scratch_limit, "Warn above", "A notification when the scratch folder grows past this" },
-        { Setting::clear_scratch, "Clear the scratch folder", "Deletes everything the chat's tools wrote" } },
-      5 },
+        { Setting::clear_scratch, "Clear the scratch folder", "Deletes everything the chat's tools wrote" },
+        { Setting::remember, "Messages to send", "How many earlier messages the page sends. A question on the TV is one message" },
+        { Setting::search_hits, "Search results", "How many results a search keeps" } },
+      7 },
+    { "Agent",
+      { { Setting::agent, "Agent mode", "Off is one reply. Plan writes a short plan, then the answer. The console keeps one model on the GPU" },
+        { Setting::coordinator, "Coordinator", "The model that should write the plan. Only the loaded model can write it" },
+        { Setting::worker, "Worker", "The model that answers after a hand off. A hand off restarts the app" },
+        { Setting::plan_tokens, "Plan length", "How long the plan may be. It does not limit the answer" } },
+      4 },
     { "Sound and storage",
       { { Setting::sounds, "Sounds", "Interface sounds on the TV" },
         { Setting::download_dir, "Save downloads to", "Internal storage, or ArtemisLM/models on an M.2 or USB drive" },
@@ -139,9 +151,9 @@ constexpr SettingCategory kCategories[] = {
     { "Diagnostics", {}, 0 },
     { "Credits", {}, 0 },
 };
-constexpr int kCategoryCount = 8;
-constexpr int kDiagnostics = 6;
-constexpr int kCredits = 7;
+constexpr int kCategoryCount = 9;
+constexpr int kDiagnostics = 7;
+constexpr int kCredits = 8;
 
 constexpr uint32_t     kCtxSteps[] = { 4096, 8192, 16384, 32768, 65536, 131072 };
 constexpr const char * kKvSteps[] = { "auto", "f16", "q8_0", "q4_0" };
@@ -399,23 +411,26 @@ std::string download_line(const Download & d) {
     return d.state == DownloadState::queued ? std::string(t) + ", waiting its turn" : t;
 }
 
+// A model path as its row shows it.
+std::string model_setting_text(const std::string & path, const std::vector<ModelRow> & models) {
+    if (path.empty()) {
+        return "None";
+    }
+    for (const auto & m : models) {
+        if (m.file == path) {
+            std::string name, build;
+            split_name(m.label, &name, &build);
+            return name + "  " + build;
+        }
+    }
+    return "Missing";
+}
+
 // The value of a setting as its row shows it, and one step of it.
 std::string setting_text(const Settings & s, Setting id, const std::vector<ModelRow> & models,
                          const std::vector<Drive> & drives) {
     switch (id) {
-        case Setting::default_model: {
-            if (s.default_model.empty()) {
-                return "None";
-            }
-            for (const auto & m : models) {
-                if (m.file == s.default_model) {
-                    std::string name, build;
-                    split_name(m.label, &name, &build);
-                    return name + "  " + build;
-                }
-            }
-            return "Missing";
-        }
+        case Setting::default_model: return model_setting_text(s.default_model, models);
         case Setting::ctx_cap: return format("%.0fk tokens", s.ctx_cap / 1024.0);
         case Setting::kv_type: return s.kv_type == "auto" ? "Auto" : s.kv_type;
         case Setting::flash_attn: return s.flash_attn == "on" ? "On" : s.flash_attn == "off" ? "Off" : "Auto";
@@ -440,6 +455,17 @@ std::string setting_text(const Settings & s, Setting id, const std::vector<Model
         }
         case Setting::migrate: return s.migrate == "on" ? "Move into ArtemisLM" : s.migrate == "off" ? "Leave them" : "Ask";
         case Setting::memory: return s.memory == "tight" ? "Tight" : s.memory == "roomy" ? "More spare" : "Measured";
+        case Setting::agent: return s.agent == "plan" ? "Plan" : s.agent == "handoff" ? "Hand off" : "Off";
+        case Setting::coordinator: return model_setting_text(s.coordinator, models);
+        case Setting::worker: return model_setting_text(s.worker, models);
+        case Setting::plan_tokens: return s.plan_tokens == 128 ? "Short" : s.plan_tokens == 512 ? "Long" : "Medium";
+        case Setting::repeat_penalty:
+            return s.repeat_penalty == "light" ? "Light" : s.repeat_penalty == "medium" ? "Medium"
+                   : s.repeat_penalty == "strong" ? "Strong" : "Off";
+        case Setting::min_p: return s.min_p == "off" ? "Off" : s.min_p;
+        case Setting::seed: return s.seed == "random" ? "Random" : s.seed;
+        case Setting::remember: return std::to_string(s.remember);
+        case Setting::search_hits: return std::to_string(s.search_hits);
         default: return "";
     }
 }
@@ -596,6 +622,91 @@ std::vector<Choice> choices_of(const Settings & s, Setting id, const std::vector
                 [](Settings & v) { v.memory = "tight"; });
             add("More spare", "A shorter context, with more room left over", s.memory == "roomy",
                 [](Settings & v) { v.memory = "roomy"; });
+            break;
+        case Setting::agent:
+            add("Off", "One reply from the loaded model", s.agent == "off", [](Settings & v) { v.agent = "off"; });
+            add("Plan", "A short plan, then the answer, both from the loaded model", s.agent == "plan",
+                [](Settings & v) { v.agent = "plan"; });
+            add("Hand off", "The page restarts onto the worker after the plan. The TV uses the loaded model", s.agent == "handoff",
+                [](Settings & v) { v.agent = "handoff"; });
+            break;
+        case Setting::coordinator:
+        case Setting::worker: {
+            const bool coord = id == Setting::coordinator;
+            const std::string current = coord ? s.coordinator : s.worker;
+            add("None", "No model chosen", current.empty(), [coord](Settings & v) {
+                if (coord) {
+                    v.coordinator.clear();
+                } else {
+                    v.worker.clear();
+                }
+            });
+            bool saw = current.empty();
+            for (const auto & m : models) {
+                if (!m.decision.empty()) {
+                    continue;
+                }
+                if (!m.fits && m.file != current) {
+                    continue;
+                }
+                std::string name, build;
+                split_name(m.label, &name, &build);
+                const std::string file = m.file;
+                if (file == current) {
+                    saw = true;
+                }
+                add(name + "  " + build, m.fits ? gb(m.size_gib) : "Does not fit", file == current, [coord, file](Settings & v) {
+                    if (coord) {
+                        v.coordinator = file;
+                    } else {
+                        v.worker = file;
+                    }
+                });
+            }
+            if (!current.empty() && !saw) {
+                add("Missing", "That file is not in the library", true, [coord, current](Settings & v) {
+                    if (coord) {
+                        v.coordinator = current;
+                    } else {
+                        v.worker = current;
+                    }
+                });
+            }
+            break;
+        }
+        case Setting::plan_tokens:
+            add("Short", "128 tokens", s.plan_tokens == 128, [](Settings & v) { v.plan_tokens = 128; });
+            add("Medium", "256 tokens", s.plan_tokens == 256, [](Settings & v) { v.plan_tokens = 256; });
+            add("Long", "512 tokens", s.plan_tokens == 512, [](Settings & v) { v.plan_tokens = 512; });
+            break;
+        case Setting::repeat_penalty:
+            add("Off", "Leave the model's own penalty", s.repeat_penalty == "off",
+                [](Settings & v) { v.repeat_penalty = "off"; });
+            add("Light", "1.05", s.repeat_penalty == "light", [](Settings & v) { v.repeat_penalty = "light"; });
+            add("Medium", "1.10", s.repeat_penalty == "medium", [](Settings & v) { v.repeat_penalty = "medium"; });
+            add("Strong", "1.15. A reply can start to sound thin", s.repeat_penalty == "strong",
+                [](Settings & v) { v.repeat_penalty = "strong"; });
+            break;
+        case Setting::min_p:
+            add("Off", "Leave the model's own tail", s.min_p == "off", [](Settings & v) { v.min_p = "off"; });
+            add("0.05", "Drop the unlikely tail", s.min_p == "0.05", [](Settings & v) { v.min_p = "0.05"; });
+            add("0.10", "A stricter tail", s.min_p == "0.10", [](Settings & v) { v.min_p = "0.10"; });
+            break;
+        case Setting::seed:
+            add("Random", "A different reply each time", s.seed == "random", [](Settings & v) { v.seed = "random"; });
+            add("42", "The same reply for the same prompt", s.seed == "42", [](Settings & v) { v.seed = "42"; });
+            add("7", "The same reply for the same prompt", s.seed == "7", [](Settings & v) { v.seed = "7"; });
+            add("1234", "The same reply for the same prompt", s.seed == "1234", [](Settings & v) { v.seed = "1234"; });
+            break;
+        case Setting::remember:
+            add("8", "A short chat", s.remember == 8, [](Settings & v) { v.remember = 8; });
+            add("16", "The usual", s.remember == 16, [](Settings & v) { v.remember = 16; });
+            add("32", "A longer chat", s.remember == 32, [](Settings & v) { v.remember = 32; });
+            break;
+        case Setting::search_hits:
+            add("3", "Fewer pages", s.search_hits == 3, [](Settings & v) { v.search_hits = 3; });
+            add("5", "The usual", s.search_hits == 5, [](Settings & v) { v.search_hits = 5; });
+            add("8", "More pages", s.search_hits == 8, [](Settings & v) { v.search_hits = 8; });
             break;
         default: break;
     }

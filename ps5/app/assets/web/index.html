@@ -209,6 +209,13 @@
   var SHELF_WORDS = ['file', 'files', 'folder', 'folders', 'usb', 'drive', 'scratch', 'project', 'projects', 'remember', 'memory', 'memories', 'note', 'notes', 'forget'];
   var fileToolsOn = true;
   var asked = '';
+  var agentMode = 'off';
+  var agentCoordinator = '';
+  var agentWorker = '';
+  var planTokens = 256;
+  var rememberN = 16;
+  var searchHits = 5;
+  var loadedPath = '';
 
   var log = document.getElementById('log');
   var scroller = document.getElementById('scroll');
@@ -656,7 +663,7 @@
       if (!body) fail(holder, req.status === 0 ? 'The console did not answer.' : 'No answer. Check that a model is loaded on the console.');
       else {
         history.push({ role: 'assistant', content: body });
-        if (history.length > 16) history = history.slice(history.length - 16);
+        if (history.length > rememberCap()) history = history.slice(history.length - rememberCap());
       }
       turn = null;
       busy(false);
@@ -686,20 +693,51 @@
     bottom();
   }
 
-  function start(text) {
-    if (modelReady === false) {
-      showNoModel();
-      return;
-    }
+  function rememberCap() {
+    if (rememberN === 8 || rememberN === 32) return rememberN;
+    return 16;
+  }
+  function hitCount() {
+    if (searchHits === 3 || searchHits === 8) return searchHits;
+    return 5;
+  }
+  function planCap() {
+    if (planTokens === 128 || planTokens === 512) return planTokens;
+    return 256;
+  }
+  function baseName(path) {
+    var s = String(path || '');
+    var i = s.lastIndexOf('/');
+    return i >= 0 ? s.substring(i + 1) : s;
+  }
+  function modelKey(path) {
+    return baseName(path).replace(/\.gguf$/i, '');
+  }
+  function sameModel(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (baseName(a) === baseName(b)) return true;
+    return modelKey(a) === modelKey(b);
+  }
+  function takeSettings(data) {
+    if (!data) return;
+    if (typeof data.tools === 'boolean') fileToolsOn = data.tools;
+    if (typeof data.agent === 'string') agentMode = data.agent;
+    if (typeof data.coordinator === 'string') agentCoordinator = data.coordinator;
+    if (typeof data.worker === 'string') agentWorker = data.worker;
+    if (typeof data.plan_tokens === 'number') planTokens = data.plan_tokens;
+    if (typeof data.remember === 'number') rememberN = data.remember;
+    if (typeof data.search_hits === 'number') searchHits = data.search_hits;
+  }
+  function openBubbles(text) {
     var empty = document.getElementById('empty');
-    if (empty) empty.parentNode.removeChild(empty);
+    if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
     var mine = document.createElement('div');
     mine.className = 'msg me';
     var bubble = document.createElement('div');
     bubble.textContent = text;
     mine.appendChild(bubble);
     log.appendChild(mine);
-
     var bot = document.createElement('div');
     bot.className = 'msg bot';
     var tools = document.createElement('div');
@@ -713,13 +751,201 @@
     bot.appendChild(caret);
     log.appendChild(bot);
     bottom();
+    return { tools: tools, answer: answer, caret: caret };
+  }
+  function dropHandoff() {
+    try { sessionStorage.removeItem('artemis-handoff'); } catch (e) {}
+  }
+  function stashHandoff(path, next, messages, tools, handAfter) {
+    try {
+      sessionStorage.setItem('artemis-handoff', JSON.stringify({
+        at: Date.now(),
+        path: path,
+        next: next,
+        messages: messages,
+        tools: tools,
+        history: history,
+        handAfter: !!handAfter,
+        user: asked
+      }));
+    } catch (e2) {}
+  }
+  function waitLoaded(path, tries, done) {
+    if (!turn || turn.cancelled) return done('Stopped.');
+    if (tries <= 0) return done('The model did not come back. Open Library and try the load again.');
+    var req = new XMLHttpRequest();
+    req.open('GET', '/v1/models');
+    req.onload = function () {
+      var id = '';
+      try {
+        var data = JSON.parse(req.responseText);
+        if (data && data.data && data.data[0] && data.data[0].id) id = data.data[0].id;
+      } catch (e) { id = ''; }
+      if (req.status === 200 && id && sameModel(id, path)) {
+        loadedPath = path;
+        modelReady = true;
+        var modelEl = document.getElementById('model');
+        if (modelEl) modelEl.textContent = modelKey(path).replace(/-/g, ' ');
+        var box = document.getElementById('input');
+        if (box) box.placeholder = 'Message';
+        return done(null);
+      }
+      setTimeout(function () { waitLoaded(path, tries - 1, done); }, 2000);
+    };
+    req.onerror = function () {
+      setTimeout(function () { waitLoaded(path, tries - 1, done); }, 2000);
+    };
+    req.send();
+  }
+  function switchModel(holder, path, title, line, next, messages, tools, handAfter, done) {
+    if (!turn || turn.cancelled) return finishStop(holder, '');
+    var slot = addTool(holder.tools, title, line, false);
+    stashHandoff(path, next, messages, tools, handAfter);
+    panelSend('POST', '/load', { path: path }, function (status, data) {
+      if (!turn || turn.cancelled) return finishStop(holder, '');
+      if (data && data.error === 'That model is already loaded') {
+        loadedPath = path;
+        slot.textContent = title + ' is loaded.';
+        dropHandoff();
+        done();
+        return;
+      }
+      if (!(data && data.ok)) {
+        slot.textContent = (data && data.error) ? data.error : 'Could not load that model.';
+        slot.parentNode.className = 'tool bad';
+        dropHandoff();
+        if (next === 'answer') streamAnswer(holder, messages, tools, 0);
+        else writePlan(holder, messages, tools, false);
+        return;
+      }
+      waitLoaded(path, 90, function (error) {
+        if (!turn || turn.cancelled) return finishStop(holder, '');
+        if (error) {
+          slot.textContent = error;
+          slot.parentNode.className = 'tool bad';
+          dropHandoff();
+          turn = null;
+          busy(false);
+          return;
+        }
+        slot.textContent = title + ' is loaded.';
+        dropHandoff();
+        done();
+      });
+    });
+  }
+  function writePlan(holder, messages, tools, handAfter) {
+    if (!turn || turn.cancelled) return finishStop(holder, '');
+    var slot = addTool(holder.tools, 'Coordinator', 'Writing a short plan on the loaded model. One model is on the GPU.', false);
+    var planMessages = [];
+    var i;
+    for (i = 0; i < messages.length; i++) {
+      if (messages[i].role === 'system') {
+        planMessages.push({ role: 'system', content: 'You are the coordinator on ArtemisLM PS5. Write a short plan for the next answer. At most 8 lines. Do not answer the question. Do not call tools. One model is loaded.' });
+      } else {
+        planMessages.push(messages[i]);
+      }
+    }
+    if (!planMessages.length || planMessages[0].role !== 'system') {
+      planMessages.unshift({ role: 'system', content: 'You are the coordinator on ArtemisLM PS5. Write a short plan for the next answer. At most 8 lines. Do not answer the question. Do not call tools. One model is loaded.' });
+    }
+    postJson('/v1/chat/completions', {
+      messages: planMessages,
+      stream: false,
+      max_tokens: planCap(),
+      chat_template_kwargs: { enable_thinking: false }
+    }, function (status, data) {
+      if (!turn || turn.cancelled) return finishStop(holder, '');
+      var msg = data && data.choices && data.choices[0] && data.choices[0].message;
+      var plan = '';
+      if (msg && typeof msg.content === 'string') plan = trim(msg.content);
+      if (!plan && msg && typeof msg.reasoning_content === 'string') plan = trim(msg.reasoning_content);
+      if (plan.length > 4000) plan = plan.substring(0, 4000);
+      if (!plan) {
+        slot.textContent = 'No plan. Answering without one.';
+        slot.parentNode.className = 'tool bad';
+      } else {
+        var shown = plan;
+        if (agentMode === 'handoff' && sameModel(loadedPath, agentWorker)) {
+          shown = plan + '\n\nThe worker is loaded, so this plan comes from it.';
+        }
+        slot.textContent = shown;
+        if (messages.length && messages[0].role === 'system') {
+          messages[0].content = messages[0].content + '\n\nCoordinator plan:\n' + plan + '\nFollow the plan when you answer.';
+        }
+      }
+      var distinct = agentCoordinator && agentWorker && !sameModel(agentCoordinator, agentWorker);
+      if (handAfter && distinct && !sameModel(loadedPath, agentWorker)) {
+        switchModel(holder, agentWorker, 'Worker', 'Restarting onto the worker. The console keeps one model on the GPU. About 30 seconds.', 'answer', messages, tools, false, function () {
+          streamAnswer(holder, messages, tools, 0);
+        });
+        return;
+      }
+      streamAnswer(holder, messages, tools, 0);
+    });
+  }
+  function beginAgent(holder, messages, tools) {
+    if (agentMode !== 'plan' && agentMode !== 'handoff') {
+      streamAnswer(holder, messages, tools, 0);
+      return;
+    }
+    var distinct = agentCoordinator && agentWorker && !sameModel(agentCoordinator, agentWorker);
+    var onCoordinator = sameModel(loadedPath, agentCoordinator);
+    var onWorker = sameModel(loadedPath, agentWorker);
+    if (agentMode === 'handoff' && distinct && !onCoordinator && !onWorker) {
+      switchModel(holder, agentCoordinator, 'Coordinator', 'Loading the coordinator. The console restarts, about 30 seconds. One model stays on the GPU.', 'plan', messages, tools, true, function () {
+        writePlan(holder, messages, tools, true);
+      });
+      return;
+    }
+    writePlan(holder, messages, tools, agentMode === 'handoff' && distinct && onCoordinator);
+  }
+  function resumeHandoff() {
+    var raw = '';
+    try { raw = sessionStorage.getItem('artemis-handoff') || ''; } catch (e) { return; }
+    if (!raw) return;
+    var saved = null;
+    try { saved = JSON.parse(raw); } catch (e2) { dropHandoff(); return; }
+    if (!saved || !saved.path || !saved.messages || !saved.at || Date.now() - saved.at > 600000) {
+      dropHandoff();
+      return;
+    }
+    if (saved.history && saved.history.length) history = saved.history;
+    asked = saved.user || '';
+    var holder = openBubbles(asked || 'Continuing the agent hand off.');
+    turn = { cancelled: false };
+    busy(true);
+    var slot = addTool(holder.tools, 'Agent', 'Waiting for the model. The console keeps one model on the GPU.', false);
+    waitLoaded(saved.path, 90, function (error) {
+      if (!turn || turn.cancelled) return finishStop(holder, '');
+      if (error) {
+        slot.textContent = error;
+        slot.parentNode.className = 'tool bad';
+        dropHandoff();
+        turn = null;
+        busy(false);
+        return;
+      }
+      slot.textContent = 'Model loaded.';
+      dropHandoff();
+      var tools = saved.tools || [];
+      if (saved.next === 'answer') streamAnswer(holder, saved.messages, tools, 0);
+      else writePlan(holder, saved.messages, tools, !!saved.handAfter);
+    });
+  }
+
+  function start(text) {
+    if (modelReady === false) {
+      showNoModel();
+      return;
+    }
+    var holder = openBubbles(text);
 
     history.push({ role: 'user', content: text });
-    if (history.length > 16) history = history.slice(history.length - 16);
+    if (history.length > rememberCap()) history = history.slice(history.length - rememberCap());
 
     asked = text;
     var kind = classify(text);
-    var holder = { tools: tools, answer: answer, caret: caret };
     turn = { cancelled: false };
     busy(true);
 
@@ -730,7 +956,7 @@
       var messages = [{ role: 'system', content: systemText(kind) }];
       for (var i = 0; i < prior.length; i++) messages.push(prior[i]);
       messages.push({ role: 'user', content: evidence(text, clockNote, searchNote, math, memoryNote) });
-      streamAnswer(holder, messages, defsFor(kind), 0);
+      beginAgent(holder, messages, defsFor(kind));
     }
     function ask(clockNote, searchNote) {
       if (!turn || turn.cancelled) return finishStop(holder, '');
@@ -770,7 +996,7 @@
       var query = text;
       if (day && text.indexOf(day) < 0) query = text + ' ' + day;
       var slot = addTool(tools, 'Web search', 'Searching for “' + query + '”…', false);
-      callTool('web_search', { query: query, num_results: 5 }, function (error, data) {
+      callTool('web_search', { query: query, num_results: hitCount() }, function (error, data) {
         if (!turn || turn.cancelled) return finishStop(holder, '');
         var body = error ? error : (data && typeof data.results === 'string' ? data.results : 'No results.');
         slot.textContent = body;
@@ -926,7 +1152,10 @@
     req.send(body ? JSON.stringify(body) : null);
   }
   panelSend('GET', '/settings', null, function (code, data) {
-    if (data && typeof data.tools === 'boolean') fileToolsOn = data.tools;
+    takeSettings(data);
+  });
+  panelSend('GET', '/artemis', null, function (code, data) {
+    if (data && typeof data.loaded === 'string') loadedPath = data.loaded;
   });
   function offered(tools, name) {
     for (var i = 0; i < tools.length; i++) {
@@ -975,7 +1204,10 @@
           if (m.preset) bits.push(m.preset);
           if (m.folder) bits.push(m.folder);
           if (m.size_gib) bits.push(gib(m.size_gib));
-          if (m.current) bits.push('running');
+          if (m.current) {
+            bits.push('running');
+            loadedPath = m.file;
+          }
           meta.textContent = bits.join(' · ');
           var plan = document.createElement('p');
           plan.textContent = m.plan || '';
@@ -1137,11 +1369,32 @@
     sel.onchange = function () {
       var body = {};
       body[key] = sel.value;
-      if (key === 'ctx_cap' || key === 'slots' || key === 'max_tokens') body[key] = Number(sel.value);
+      if (key === 'ctx_cap' || key === 'slots' || key === 'max_tokens' || key === 'plan_tokens' || key === 'remember' || key === 'search_hits') body[key] = Number(sel.value);
+      if (key === 'agent') agentMode = sel.value;
+      if (key === 'coordinator') agentCoordinator = sel.value;
+      if (key === 'worker') agentWorker = sel.value;
+      if (key === 'plan_tokens') planTokens = Number(sel.value);
+      if (key === 'remember') rememberN = Number(sel.value);
+      if (key === 'search_hits') searchHits = Number(sel.value);
       saveSetting(body);
     };
     wrap.appendChild(sel);
     form.appendChild(wrap);
+  }
+  function addModelSelect(form, label, key, current, models) {
+    var options = [['', 'None']];
+    var saw = !current;
+    for (var i = 0; i < models.length; i++) {
+      var m = models[i];
+      if (!m || !m.file || m.kind === 'Decision') continue;
+      if (!m.fits && m.file !== current) continue;
+      var name = m.label || m.file;
+      if (!m.fits) name = name + ' (does not fit)';
+      options.push([m.file, name]);
+      if (m.file === current) saw = true;
+    }
+    if (current && !saw) options.push([current, 'Missing']);
+    addSelect(form, label, key, current || '', options);
   }
   function addCheck(form, label, key, on) {
     var wrap = document.createElement('label');
@@ -1201,7 +1454,27 @@
         status.textContent = 'Settings on port 47282 did not answer.';
         return;
       }
-      status.textContent = 'Changes apply on the console. Context and memory apply at the next load.';
+      takeSettings(data);
+      status.textContent = 'Changes apply on the console. Context, memory, repeat penalty, min-p, and seed apply at the next load.';
+      panelSend('GET', '/library', null, function (libCode, lib) {
+      var models = lib && lib.models ? lib.models : [];
+      var mi;
+      for (mi = 0; mi < models.length; mi++) {
+        if (models[mi] && models[mi].current && models[mi].file) loadedPath = models[mi].file;
+      }
+      var agentNote = document.createElement('p');
+      agentNote.className = 'note';
+      agentNote.textContent = data.agent_note || 'The console keeps one model on the GPU.';
+      form.appendChild(agentNote);
+      addSelect(form, 'Agent mode', 'agent', data.agent || 'off', [['off', 'Off'], ['plan', 'Plan'], ['handoff', 'Hand off']]);
+      addModelSelect(form, 'Coordinator', 'coordinator', data.coordinator || '', models);
+      addModelSelect(form, 'Worker', 'worker', data.worker || '', models);
+      addSelect(form, 'Plan length', 'plan_tokens', data.plan_tokens || 256, [['128', 'Short'], ['256', 'Medium'], ['512', 'Long']]);
+      addSelect(form, 'Repeat penalty', 'repeat_penalty', data.repeat_penalty || 'off', [['off', 'Off'], ['light', 'Light'], ['medium', 'Medium'], ['strong', 'Strong']]);
+      addSelect(form, 'Minimum probability', 'min_p', data.min_p || 'off', [['off', 'Off'], ['0.05', '0.05'], ['0.10', '0.10']]);
+      addSelect(form, 'Seed', 'seed', data.seed || 'random', [['random', 'Random'], ['42', '42'], ['7', '7'], ['1234', '1234']]);
+      addSelect(form, 'Messages to send', 'remember', data.remember || 16, [['8', '8'], ['16', '16'], ['32', '32']]);
+      addSelect(form, 'Search results', 'search_hits', data.search_hits || 5, [['3', '3'], ['5', '5'], ['8', '8']]);
       addCheck(form, 'Also read PS5LM and PS5LM Plus (/data/PS5LM/models)', 'scan_ps5lm', data.scan_ps5lm);
       addCheck(form, 'Also read M.2, USB and loose files', 'scan_usb', data.scan_usb);
       addSelect(form, 'Models elsewhere', 'migrate', data.migrate, [['ask', 'Ask'], ['off', 'Leave them'], ['on', 'Move into ArtemisLM']]);
@@ -1282,6 +1555,7 @@
       upd.appendChild(go);
       form.appendChild(upd);
       paintUpdate();
+      });
     });
   }
   document.getElementById('tab-chat').onclick = function () { showTab('chat'); };
@@ -1305,6 +1579,8 @@
       start(this.textContent);
     };
   }
+
+  resumeHandoff();
 
   // A paper plane on a ring, drawn on this device. The console keeps its memory for the model.
   (function sky() {

@@ -65,6 +65,7 @@ int main(int argc, char ** argv) {
     // attention on, the small batch, one slot, the family's sampling.
     assert(has_args(cp, "-fa", "on") && has_args(cp, "-b", "256") && has_args(cp, "-np", "1"));
     assert(has_args(cp, "--temp", "0.6") && !has_args(cp, "--reasoning", "off") && !has_args(cp, "-n", "512"));
+    assert(!has_args(cp, "--seed", "42") && !has_args(cp, "--repeat-penalty", "1.10"));
 
     ps5lm::RunOptions custom;
     custom.batch = "wide";
@@ -74,14 +75,21 @@ int main(int argc, char ** argv) {
     custom.max_tokens = 512;
     custom.reasoning = "off";
     custom.system_prompt = "concise";
+    custom.repeat_penalty = "medium";
+    custom.min_p = "0.05";
+    custom.seed = "42";
     const ps5lm::Plan tuned = ps5lm::plan_model(c, budget, 65536, nullptr, custom);
     assert(has_args(tuned, "-fa", "off") && has_args(tuned, "-b", "1024") && has_args(tuned, "-ub", "256"));
     assert(has_args(tuned, "-np", "2") && has_args(tuned, "--temp", "0.2") && !has_args(tuned, "--temp", "0.6"));
     assert(has_args(tuned, "-n", "512") && has_args(tuned, "--reasoning", "off"));
     assert(has_args(tuned, "-sys", "Answer in as few words as the question allows."));
+    assert(has_args(tuned, "--repeat-penalty", "1.10") && has_args(tuned, "--min-p", "0.05"));
+    assert(!has_args(tuned, "--min-p", "0") && has_args(tuned, "--seed", "42"));
+    assert(has_args(tuned, "-ngl", "999") && has_args(tuned, "-fit", "off"));
     // A decision model still needs the wide ubatch, and it does not chat.
     const ps5lm::Plan dwide = ps5lm::plan_model(d, budget, 65536, nullptr, custom);
     assert(has_args(dwide, "-ub", "2048") && has_args(dwide, "-b", "2048") && !has_args(dwide, "--reasoning", "off"));
+    assert(!has_args(dwide, "--seed", "42") && !has_args(dwide, "--repeat-penalty", "1.10"));
 
     // Tight and roomy only change the spare memory. The measured GPU flags stay.
     ps5lm::RunOptions tight;

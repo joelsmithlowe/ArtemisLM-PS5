@@ -48,6 +48,20 @@ struct Settings {
     // so a longer context can fit, and a load can fail. "roomy" keeps more.
     // None of them moves a layer off the GPU.
     std::string memory = "measured";
+    // Agent mode never loads two models at once. "off" is one reply. "plan"
+    // writes a short plan, then the answer, on the model that is loaded.
+    // "handoff" does that plan and then, from the page, restarts onto worker.
+    std::string agent = "off";       // "off", "plan" or "handoff"
+    std::string coordinator;         // a library path, or empty
+    std::string worker;              // a library path, or empty
+    uint32_t    plan_tokens = 256;   // 128, 256 or 512: the plan only, not the answer
+    // Sampling extras. They are llama-server flags, applied at the next load.
+    // They do not change -ngl, -fit, flash attention, or the batch.
+    std::string repeat_penalty = "off";  // "off", "light", "medium" or "strong"
+    std::string min_p = "off";           // "off", "0.05" or "0.10"
+    std::string seed = "random";         // "random", "42", "7" or "1234"
+    uint32_t    remember = 16;           // messages the page sends back: 8, 16 or 32
+    uint32_t    search_hits = 5;         // 3, 5 or 8
 
     bool operator==(const Settings &) const = default;
 };

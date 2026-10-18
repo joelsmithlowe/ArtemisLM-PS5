@@ -1,13 +1,25 @@
 # Changelog
 
-ArtemisLM PS5 0.9.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.9.0.zip`.
-`contentVersion` stays `01.009.000`, so the console does not offer a system
-update. A newer release installs from Settings, or by copying the `PPSA98010`
-folder over the installed one.
+ArtemisLM PS5 0.10.0, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.10.0.zip`.
+`contentVersion` is `01.010.000`. A newer release installs from Settings, or by
+copying the `PPSA98010` folder over the installed one.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.10.0] - 2026-10-18
+
+### Added
+
+- Agent mode. Settings names a coordinator and a worker. The console keeps one
+  model on the GPU. Plan writes a short plan, then the answer, on the loaded
+  model. Hand off, from the page, restarts onto the worker after the plan. On
+  the TV the loaded model writes both.
+- Sampling can set a repeat penalty, a minimum probability, and a seed. They
+  apply the next time a model loads.
+- The page can send back 8, 16, or 32 earlier messages. A search can keep 3,
+  5, or 8 results.
 
 ## [0.9.0] - 2026-10-18
 

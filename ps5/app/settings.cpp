@@ -12,6 +12,8 @@ namespace {
 
 // A value the planner would hand to llama-server unchanged. Anything else
 // falls back, so a hand-edited file cannot make the server refuse to start.
+bool model_choice_ok(const std::string & path);
+
 bool one_of(const std::string & v, std::initializer_list<const char *> ok) {
     for (const char * s : ok) {
         if (v == s) {
@@ -63,6 +65,53 @@ void keep_known(Settings & s) {
     if (!extra_dir_ok(s.extra_dir)) {
         s.extra_dir.clear();
     }
+    if (!one_of(s.agent, { "off", "plan", "handoff" })) {
+        s.agent = "off";
+    }
+    if (!model_choice_ok(s.coordinator)) {
+        s.coordinator.clear();
+    }
+    if (!model_choice_ok(s.worker)) {
+        s.worker.clear();
+    }
+    if (s.plan_tokens != 128 && s.plan_tokens != 256 && s.plan_tokens != 512) {
+        s.plan_tokens = 256;
+    }
+    if (!one_of(s.repeat_penalty, { "off", "light", "medium", "strong" })) {
+        s.repeat_penalty = "off";
+    }
+    if (!one_of(s.min_p, { "off", "0.05", "0.10" })) {
+        s.min_p = "off";
+    }
+    if (!one_of(s.seed, { "random", "42", "7", "1234" })) {
+        s.seed = "random";
+    }
+    if (s.remember != 8 && s.remember != 16 && s.remember != 32) {
+        s.remember = 16;
+    }
+    if (s.search_hits != 3 && s.search_hits != 5 && s.search_hits != 8) {
+        s.search_hits = 5;
+    }
+}
+
+// A library file the agent rows may name. Empty is "no model". A bad value
+// is dropped so a hand-edited file cannot point the load at something else.
+bool model_choice_ok(const std::string & path) {
+    if (path.empty()) {
+        return true;
+    }
+    if (path.size() < 6 || path.size() > 512 || path[0] != '/' || path.compare(path.size() - 5, 5, ".gguf") != 0) {
+        return false;
+    }
+    if (path.find("..") != std::string::npos) {
+        return false;
+    }
+    for (unsigned char c : path) {
+        if (c <= 32 || c == 127) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace
@@ -112,6 +161,15 @@ Settings load_settings(const char * path) {
     s.extra_dir     = j.value("extra_dir", s.extra_dir);
     s.migrate       = j.value("migrate", s.migrate);
     s.memory        = j.value("memory", s.memory);
+    s.agent         = j.value("agent", s.agent);
+    s.coordinator   = j.value("coordinator", s.coordinator);
+    s.worker        = j.value("worker", s.worker);
+    s.plan_tokens   = j.value("plan_tokens", s.plan_tokens);
+    s.repeat_penalty = j.value("repeat_penalty", s.repeat_penalty);
+    s.min_p         = j.value("min_p", s.min_p);
+    s.seed          = j.value("seed", s.seed);
+    s.remember      = j.value("remember", s.remember);
+    s.search_hits   = j.value("search_hits", s.search_hits);
     keep_known(s);
     return s;
 }
@@ -127,6 +185,10 @@ bool save_settings(const char * path, const Settings & s) {
         { "scratch_limit_gib", s.scratch_limit_gib }, { "download_dir", s.download_dir },
         { "scan_ps5lm", s.scan_ps5lm }, { "scan_usb", s.scan_usb }, { "extra_dir", s.extra_dir },
         { "migrate", s.migrate }, { "memory", s.memory },
+        { "agent", s.agent }, { "coordinator", s.coordinator }, { "worker", s.worker },
+        { "plan_tokens", s.plan_tokens }, { "repeat_penalty", s.repeat_penalty },
+        { "min_p", s.min_p }, { "seed", s.seed },
+        { "remember", s.remember }, { "search_hits", s.search_hits },
     };
     std::ofstream out(path);
     out << j.dump(2) << "\n";

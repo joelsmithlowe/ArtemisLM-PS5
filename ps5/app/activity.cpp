@@ -166,13 +166,48 @@ std::string answer_from(const json & j) {
     return {};
 }
 
+// A short plan from the loaded model. The TV cannot restart onto a second
+// model in the middle of a question, so the same model answers afterwards.
+std::string coordinator_plan(int port, const std::string & text, int plan_tokens) {
+    if (plan_tokens != 128 && plan_tokens != 256 && plan_tokens != 512) {
+        plan_tokens = 256;
+    }
+    json body;
+    body["stream"] = false;
+    body["max_tokens"] = plan_tokens;
+    body["chat_template_kwargs"] = { { "enable_thinking", false } };
+    body["messages"] = json::array({
+        { { "role", "system" },
+          { "content", "You are the coordinator on ArtemisLM PS5. Write a short plan for the answer. At most 8 lines. Do not answer the question. One model is loaded." } },
+        { { "role", "user" }, { "content", "Plan this, do not answer:\n" + text } },
+    });
+    const std::string raw = ps5lm::http_post(port, "/v1/chat/completions", body.dump(), 120);
+    const json got = json::parse(raw, nullptr, false);
+    if (!got.is_object() || !got.contains("choices") || !got["choices"].is_array() || got["choices"].empty()) {
+        return {};
+    }
+    const json & choice = got["choices"][0];
+    if (!choice.contains("message") || !choice["message"].is_object()) {
+        return {};
+    }
+    const json & content = choice["message"]["content"];
+    if (content.is_string()) {
+        return content.get<std::string>();
+    }
+    if (choice["message"].contains("reasoning_content") && choice["message"]["reasoning_content"].is_string()) {
+        return choice["message"]["reasoning_content"].get<std::string>();
+    }
+    return {};
+}
+
 }  // namespace
 
 namespace ps5lm {
 
 void set_activity_sink(StatsCollector * stats) { g_sink = stats; }
 
-void ask_self(int port, const std::string & text, bool decision, bool clock_on, bool web_on) {
+void ask_self(int port, const std::string & text, bool decision, bool clock_on, bool web_on, int search_hits,
+              const std::string & agent, int plan_tokens) {
     json body;
     if (decision) {
         // Two questions any text answers: what its writer wants, and their mood.
@@ -186,10 +221,14 @@ void ask_self(int port, const std::string & text, bool decision, bool clock_on, 
         // The clock and the search run on a side thread, so the dashboard stays
         // responsive. The model answers from the notes. The TV request does not
         // carry tool definitions, so the model is not asked to call them itself.
-        std::thread([port, text, clock_on, web_on] {
+        std::thread([port, text, clock_on, web_on, search_hits, agent, plan_tokens] {
             json messages = json::array();
-            const LiveFacts facts = live_facts(text, clock_on, web_on);
-            if (facts.used_clock || facts.used_search || facts.used_calc) {
+            const LiveFacts facts = live_facts(text, clock_on, web_on, search_hits);
+            std::string plan;
+            if (agent == "plan" || agent == "handoff") {
+                plan = coordinator_plan(port, text, plan_tokens);
+            }
+            if (facts.used_clock || facts.used_search || facts.used_calc || !plan.empty()) {
                 std::string note = "You are ArtemisLM PS5. Answer from the notes below. "
                                    "Do not invent a rate, a price or a date. If the search failed, say so.";
                 if (facts.used_clock) {
@@ -200,6 +239,9 @@ void ask_self(int port, const std::string & text, bool decision, bool clock_on, 
                 }
                 if (facts.used_search) {
                     note += "\nWeb search (web_search):\n" + facts.search;
+                }
+                if (!plan.empty()) {
+                    note += "\nCoordinator plan:\n" + plan + "\nFollow the plan. This console keeps one model loaded.";
                 }
                 messages.push_back({ { "role", "system" }, { "content", note } });
             }

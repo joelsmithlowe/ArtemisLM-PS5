@@ -372,6 +372,68 @@ std::string search_files(const std::string & repo) {
     return nlohmann::json{ { "repo", repo }, { "files", std::move(files) }, { "error", error } }.dump();
 }
 
+// What Agent mode can promise. Each named model is planned on its own.
+// The two totals are not added: the console loads one model at a time.
+std::string agent_note_for(const Settings & s, double budget) {
+    std::string note = "The console keeps one model on the GPU.";
+    if (s.agent == "handoff") {
+        note += " Hand off restarts onto the worker after the plan, about 30 seconds. On the TV, the loaded model writes the plan and the answer.";
+    } else if (s.agent == "plan") {
+        note += " Plan writes a short plan, then the answer, on the loaded model.";
+    } else {
+        note += " Agent mode is off.";
+    }
+    if (!s.coordinator.empty() && s.coordinator == s.worker) {
+        note += " Both roles are the same model, so there is no restart.";
+    }
+    if (s.coordinator.empty() && s.worker.empty()) {
+        return note;
+    }
+    const auto have = find_models(library_dirs(s));
+    const auto one = [&](const std::string & path, const char * role) -> std::string {
+        if (path.empty()) {
+            return {};
+        }
+        bool known = false;
+        for (const auto & got : have) {
+            if (got == path) {
+                known = true;
+                break;
+            }
+        }
+        if (!known) {
+            return std::string(role) + " is not in the library.";
+        }
+        if (budget <= 0) {
+            return std::string(role) + " waits for the GPU.";
+        }
+        const ModelInfo m = read_model_info(path);
+        if (!m.decision.empty()) {
+            return std::string(role) + " is a decision model, which does not chat.";
+        }
+        const char * kv = s.kv_type == "auto" ? nullptr : s.kv_type.c_str();
+        RunOptions run;
+        run.flash_attn = s.flash_attn;
+        run.batch = s.batch;
+        run.slots = s.slots;
+        run.memory = s.memory;
+        const Plan p = m.ok ? plan_model(m, budget, s.ctx_cap, kv, run) : Plan{};
+        if (!m.ok || !p.fits) {
+            return std::string(role) + " does not fit.";
+        }
+        return std::string(role) + " fits on its own.";
+    };
+    const std::string coordinator = one(s.coordinator, "The coordinator");
+    const std::string worker = one(s.worker, "The worker");
+    if (!coordinator.empty()) {
+        note += " " + coordinator;
+    }
+    if (!worker.empty()) {
+        note += " " + worker;
+    }
+    return note;
+}
+
 std::string save_from_page(const std::string & body) {
     const nlohmann::json j = nlohmann::json::parse(body, nullptr, false);
     if (!j.is_object()) {
@@ -430,9 +492,18 @@ std::string save_from_page(const std::string & body) {
     }
     take_text("migrate", s.migrate);
     take_text("memory", s.memory);
+    take_text("agent", s.agent);
+    take_text("coordinator", s.coordinator);
+    take_text("worker", s.worker);
+    take_text("repeat_penalty", s.repeat_penalty);
+    take_text("min_p", s.min_p);
+    take_text("seed", s.seed);
     take_u("ctx_cap", s.ctx_cap);
     take_u("slots", s.slots);
     take_u("scratch_limit_gib", s.scratch_limit_gib);
+    take_u("plan_tokens", s.plan_tokens);
+    take_u("remember", s.remember);
+    take_u("search_hits", s.search_hits);
     if (j.contains("max_tokens") && j["max_tokens"].is_number_integer()) {
         s.max_tokens = j["max_tokens"].get<int32_t>();
     }
@@ -529,7 +600,13 @@ void handle(int fd, const std::string & method, const std::string & path, const 
     } else if (method == "GET" && (route == "/artemis" || route == "/health")) {
         out = artemis_json();
     } else if (method == "GET" && route == "/settings") {
-        const Settings s = load_settings(kSettingsPath);
+        Settings s;
+        double budget = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            s = load_settings(kSettingsPath);
+            budget = g_budget;
+        }
         out = nlohmann::json{
             { "auto_load", s.auto_load }, { "default_model", s.default_model }, { "ctx_cap", s.ctx_cap },
             { "kv_type", s.kv_type }, { "flash_attn", s.flash_attn }, { "batch", s.batch }, { "slots", s.slots },
@@ -538,6 +615,10 @@ void handle(int fd, const std::string & method, const std::string & path, const 
             { "web_search", s.web_search }, { "datetime", s.datetime }, { "scratch_limit_gib", s.scratch_limit_gib },
             { "download_dir", s.download_dir }, { "scan_ps5lm", s.scan_ps5lm }, { "scan_usb", s.scan_usb },
             { "extra_dir", s.extra_dir }, { "migrate", s.migrate }, { "memory", s.memory },
+            { "agent", s.agent }, { "coordinator", s.coordinator }, { "worker", s.worker },
+            { "plan_tokens", s.plan_tokens }, { "repeat_penalty", s.repeat_penalty },
+            { "min_p", s.min_p }, { "seed", s.seed }, { "remember", s.remember },
+            { "search_hits", s.search_hits }, { "agent_note", agent_note_for(s, budget) },
         }.dump();
     } else if (method == "GET" && route == "/search") {
         const std::string repo = query_value(path, "repo");

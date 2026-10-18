@@ -58,6 +58,6 @@ struct LiveFacts {
     std::string calc;
 };
 
-LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on);
+LiveFacts live_facts(const std::string & question, bool clock_on, bool web_on, int search_hits = 5);
 
 }  // namespace ps5lm

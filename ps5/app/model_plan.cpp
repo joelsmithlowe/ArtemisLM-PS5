@@ -447,11 +447,17 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
     const bool override_sampling = run.sampling != "model";
     if (preset) {
         for (size_t i = 0; i < preset->args.size(); ++i) {
-            if (override_sampling && sampling_flag(preset->args[i]) && i + 1 < preset->args.size()) {
+            const std::string & flag = preset->args[i];
+            // A reply style replaces the family's sampling. A repeat penalty or
+            // min-p set here replaces only that flag and leaves the rest.
+            const bool replace = (override_sampling && sampling_flag(flag)) ||
+                                 (run.repeat_penalty != "off" && flag == "--repeat-penalty") ||
+                                 (run.min_p != "off" && flag == "--min-p");
+            if (replace && i + 1 < preset->args.size()) {
                 ++i;
                 continue;
             }
-            p.args.push_back(preset->args[i]);
+            p.args.push_back(flag);
         }
     }
     // Chat-only. A decision model reads its answer off one forward pass and
@@ -472,6 +478,20 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
         }
         if (const char * prompt = system_prompt_text(run.system_prompt)) {
             p.args.insert(p.args.end(), { "-sys", prompt });
+        }
+        // Sampling only. The GPU flags above stay on the measured path.
+        if (run.repeat_penalty == "light") {
+            p.args.insert(p.args.end(), { "--repeat-penalty", "1.05" });
+        } else if (run.repeat_penalty == "medium") {
+            p.args.insert(p.args.end(), { "--repeat-penalty", "1.10" });
+        } else if (run.repeat_penalty == "strong") {
+            p.args.insert(p.args.end(), { "--repeat-penalty", "1.15" });
+        }
+        if (run.min_p == "0.05" || run.min_p == "0.10") {
+            p.args.insert(p.args.end(), { "--min-p", run.min_p });
+        }
+        if (run.seed == "42" || run.seed == "7" || run.seed == "1234") {
+            p.args.insert(p.args.end(), { "--seed", run.seed });
         }
     }
     return p;

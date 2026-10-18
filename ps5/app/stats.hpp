@@ -180,7 +180,8 @@ std::string http_post(int port, const char * path, const std::string & body, int
 // Asks the app's own server, as Home's Message and Demo do, on a thread of its
 // own: a chat message, or for a decision model a text to decide on. It shows
 // in the feed like any other request (activity.cpp).
-void ask_self(int port, const std::string & text, bool decision, bool clock_on, bool web_on);
+void ask_self(int port, const std::string & text, bool decision, bool clock_on, bool web_on, int search_hits = 5,
+              const std::string & agent = "off", int plan_tokens = 256);
 
 // One value from Prometheus text ("llamacpp:tokens_predicted_total 42").
 double metric(const std::string & text, const char * name);
