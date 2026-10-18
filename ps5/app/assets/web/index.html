@@ -11,7 +11,8 @@
   modern bundle, and this file is the only one the server has to find.
   A question about today reads the console clock, then searches with that
   date, and only then asks the model. With no model loaded, this page
-  offers a download in Library or a folder in Settings.
+  lists models already on the console and can load one. Tools, attachments,
+  and the project folders are on this page.
   SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <style>
@@ -46,7 +47,7 @@
   .brand span { color: var(--accent); font-weight: 650; }
   .model { color: var(--muted); font-size: 0.875rem; margin-left: auto;
     max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .nav { display: flex; gap: 0.4rem; padding: 0 1rem 0.75rem; background: rgba(12, 12, 18, 0.4); }
+  .nav { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 1rem 0.75rem; background: rgba(12, 12, 18, 0.4); }
   .tab { min-height: 36px; border: 1px solid var(--border); background: transparent;
     color: var(--muted); border-radius: 999px; padding: 0.3rem 0.85rem; }
   .tab.on { background: var(--raised); color: var(--text); border-color: var(--raised); }
@@ -60,8 +61,8 @@
   .rowbtns button, .field button, .searchbar button { min-height: 44px; border-radius: 10px;
     border: 1px solid var(--border); background: var(--raised); color: var(--text); padding: 0 0.8rem; }
   .rowbtns button.primary, .searchbar button { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 650; }
-  .searchbar, .field { display: flex; gap: 0.5rem; margin: 0 0 0.8rem; }
-  .searchbar input, .field input, .field select { flex: 1; min-width: 0; min-height: 44px; font-size: 16px;
+  .searchbar, .field { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.8rem; }
+  .searchbar input, .searchbar select, .field input, .field select { flex: 1 1 8rem; min-width: 0; min-height: 44px; font-size: 16px;
     color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.4rem 0.7rem; }
   .check { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; color: var(--body); }
   .note { color: var(--muted); font-size: 0.875rem; line-height: 1.45; margin: 0 0 0.8rem; }
@@ -117,6 +118,35 @@
   .send { flex: none; min-width: 4.6rem; min-height: 44px; border: 0; border-radius: 12px;
     background: var(--accent); color: var(--accent-ink); font-weight: 650; padding: 0 0.9rem; }
   .send.stop { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
+  .bar { max-width: 42rem; margin: 0 auto 0.45rem; display: flex; gap: 0.4rem; align-items: center; }
+  .bar button { min-height: 36px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted); padding: 0 0.75rem; }
+  .menu { position: relative; }
+  .menu-panel { display: none; position: absolute; left: 0; bottom: 2.5rem; z-index: 5; min-width: 15rem;
+    background: #17171f; border: 1px solid var(--border); border-radius: 12px; padding: 0.35rem 0.7rem; }
+  .menu.open .menu-panel { display: block; }
+  .menu-panel label { display: flex; align-items: center; gap: 0.55rem; min-height: 36px; color: var(--body); }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; max-width: 42rem; margin: 0 auto 0.4rem; }
+  .chips:empty { display: none; }
+  .chip { display: flex; align-items: center; gap: 0.35rem; max-width: 100%;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    color: var(--body); padding: 0.2rem 0.55rem 0.2rem 0.75rem; font-size: 0.8125rem; }
+  .chip button { border: 0; background: transparent; color: var(--muted); min-height: 28px; padding: 0 0.2rem; }
+  .filebody { margin: 0.6rem 0 0; padding: 0.75rem; max-height: 18rem; overflow: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    color: var(--body); white-space: pre-wrap; overflow-wrap: anywhere; word-wrap: break-word; }
+  .filebody:empty { display: none; }
+  .me img { display: block; max-width: 100%; max-height: 180px; margin-top: 0.45rem; border-radius: 8px; }
+  .chip img { width: 22px; height: 22px; object-fit: cover; border-radius: 6px; }
+  .codewrap { margin: 0.45rem 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #12121a; }
+  .codebar { display: flex; justify-content: flex-end; }
+  .codebar button { min-height: 28px; border: 0; background: transparent; color: var(--muted); padding: 0.15rem 0.55rem; }
+  .code { margin: 0; padding: 0.15rem 0.8rem 0.75rem; overflow: auto; white-space: pre;
+    font-family: Consolas, "Courier New", monospace; font-size: 0.85rem; color: var(--body); }
+  .prose { white-space: pre-wrap; }
+  .preview { width: 100%; height: 22rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; margin-top: 0.6rem; }
+  .preview.off { display: none; }
+  .menu-note { color: var(--faint); font-size: 0.8125rem; line-height: 1.35; margin: 0.15rem 0 0.35rem; }
 
   @supports (padding: env(safe-area-inset-bottom)) {
     .top { padding-top: calc(0.85rem + env(safe-area-inset-top)); }
@@ -147,6 +177,7 @@
 <nav class="nav">
   <button class="tab on" id="tab-chat" type="button">Chat</button>
   <button class="tab" id="tab-library" type="button">Library</button>
+  <button class="tab" id="tab-projects" type="button">Projects</button>
   <button class="tab" id="tab-settings" type="button">Settings</button>
 </nav>
 
@@ -159,6 +190,7 @@
         <button class="idea" type="button">What is the USD to AUD rate today?</button>
         <button class="idea" type="button">What is the weather today?</button>
         <button class="idea" type="button">What time is it on the console?</button>
+        <button class="idea" type="button">Code a small web page on this console</button>
       </div>
     </div>
   </div>
@@ -179,6 +211,26 @@
   </div>
 </div>
 
+<div class="page off" id="view-projects">
+  <div class="column">
+    <p class="note">Projects live in /data/ArtemisLM/projects, next to the models folder. Ask chat to code an app, or create a folder here. This console stores and reviews the files. It does not start Node or Python. A web page can be previewed below.</p>
+    <div class="searchbar">
+      <input id="proj-name" type="text" maxlength="32" placeholder="Project name" autocomplete="off">
+      <select id="proj-kind" aria-label="Kind">
+        <option value="static-page">Web page</option>
+        <option value="node-server">Node server</option>
+        <option value="python">Python</option>
+      </select>
+      <button id="proj-new" type="button">Create</button>
+    </div>
+    <div class="status" id="proj-status">Loading projects…</div>
+    <div id="proj-list"></div>
+    <div id="proj-files"></div>
+    <pre class="filebody" id="proj-view"></pre>
+    <iframe class="preview off" id="proj-preview" sandbox="allow-scripts" title="Page preview"></iframe>
+  </div>
+</div>
+
 <div class="page off" id="view-settings">
   <div class="column">
     <p class="note">Every layer stays on the GPU. The measured fit is the one this console was tested with. Tight keeps less spare so a longer context can fit, and a load can fail. CPU threads stay on the safe count for this console.</p>
@@ -188,6 +240,16 @@
 </div>
 
 <div class="composer">
+  <div class="chips" id="chips"></div>
+  <div class="bar">
+    <div class="menu" id="tool-menu">
+      <button type="button" id="tool-toggle">Tools</button>
+      <div class="menu-panel" id="tool-panel"></div>
+    </div>
+    <button type="button" id="attach-btn">Attach</button>
+    <button type="button" id="new-chat">New</button>
+    <input id="attach-file" type="file" accept="image/*,.txt,.md,.json,.js,.mjs,.html,.css,.py,.svg,.csv" multiple style="position:absolute;left:-9999px;width:1px;height:1px;">
+  </div>
   <form id="form">
     <textarea id="input" rows="1" placeholder="Message" autocomplete="off"></textarea>
     <button class="send" id="send" type="submit">Send</button>
@@ -209,8 +271,18 @@
   var REF_NAMES = { convert_units: 'convert', calendar: 'calendar', lookup: 'lookup', text_codec: 'text' };
   var REF_WORDS = ['convert', 'conversion', 'kilometer', 'kilometre', 'mile', 'miles', 'celsius', 'fahrenheit', 'kelvin', 'kilogram', 'pound', 'pounds', 'gallon', 'litre', 'liter', 'weekday', 'calendar', 'atomic', 'element', 'base64', 'sha256', 'sha-256', 'nanometer', 'gigabyte', 'kibibyte', 'mebibyte', 'status code'];
   var referenceTurn = false;
-  var CODE_VERBS = ['create', 'build', 'write', 'make', 'add', 'fix', 'review', 'check', 'scaffold'];
-  var CODE_NOUNS = ['app', 'server', 'website', 'webpage', 'html', 'node', 'python', 'script', 'project', 'program'];
+  var CODE_VERBS = ['create', 'build', 'write', 'make', 'add', 'fix', 'review', 'check', 'scaffold', 'code', 'coding', 'program', 'develop', 'implement', 'design'];
+  var CODE_NOUNS = ['app', 'server', 'website', 'webpage', 'html', 'node', 'python', 'script', 'project', 'program', 'application', 'page', 'api'];
+  var ASK_IDEAS = [
+    'What is the USD to AUD rate today?',
+    'What is the weather today?',
+    'What time is it on the console?',
+    'Code a small web page on this console'
+  ];
+  var toolOn = { search: true, clock: true, projects: true, files: true, notes: true, reference: true };
+  var toolTouched = false;
+  var attachments = [];
+  var visionOn = false;
   var SHELF_WORDS = ['file', 'files', 'folder', 'folders', 'usb', 'drive', 'scratch', 'project', 'projects', 'remember', 'memory', 'memories', 'note', 'notes', 'forget'];
   var fileToolsOn = true;
   var asked = '';
@@ -262,9 +334,15 @@
   }
   // 'code' saves a project when file tools are on. 'search' reads the clock
   // and searches. 'clock' only reads the clock. 'none' goes straight to the model.
+  function codingAsk(q) {
+    if (!anyWord(q, CODE_VERBS)) return false;
+    if (anyWord(q, CODE_NOUNS)) return true;
+    if ((hasWord(q, 'code') || hasWord(q, 'coding')) && !hasWord(q, 'status')) return true;
+    return false;
+  }
   function classify(raw) {
     var q = String(raw || '').toLowerCase();
-    if (fileToolsOn && anyWord(q, CODE_VERBS) && anyWord(q, CODE_NOUNS)) return 'code';
+    if (fileToolsOn && codingAsk(q)) return 'code';
     var topical = anyWord(q, SEARCH_WORDS);
     var clockish = topical || anyWord(q, CLOCK_WORDS);
     if (!clockish) return 'none';
@@ -342,12 +420,32 @@
 
   function systemText(kind) {
     var s = 'You are ArtemisLM PS5, running on a PlayStation 5. When the message includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed or has no figure, say so. Be direct.';
-    if (kind === 'search') s += ' Call web_fetch on one link only when the snippet is not enough. A question that says research or scrape already includes the text of one page.';
-    if (kind === 'code') s += ' File tools are on. Projects are folders in /data/ArtemisLM/projects, next to the models folder. Call project_create, then project_write for each source file, then project_review. Call project_remove to delete one file. It does not delete the project folder. Fix every review error before you say the build is ready. Kinds are node-server, static-page and python. Keep each file under 12000 characters. Allowed endings are .js .mjs .cjs .json .html .css .md .txt .py .svg. Put page script in a .js file. Do not use a JavaScript regex literal; use new RegExp. This console stores and reviews the files. It cannot start Node or Python. Tell the user the folder path and the command to run on a computer.';
-    if (referenceTurn) s += ' A reference line was computed on this console. Use that figure and do not replace it. Call convert_units, calendar, lookup, or text_codec when you need another figure from the same tables.';
+    if (toolOn.search) s += ' Call web_fetch on one link only when the snippet is not enough.';
+    if (toolOn.projects && fileToolsOn) {
+      s += ' You can write apps on this console. Projects are folders in /data/ArtemisLM/projects. A review that says this console cannot start Node or Python means the process is not launched. The files are still saved. Do not say you cannot code or that you have no tools.';
+      if (kind === 'code') s += ' Call project_create, then project_write for each source file, then project_review. Name the folder and tell the user to open the Projects tab. Fix every review error before you say the build is ready. Kinds are node-server, static-page and python. Keep each file under 12000 characters. Allowed endings are .js .mjs .cjs .json .html .css .md .txt .py .svg. Put page script in a .js file. Do not use a JavaScript regex literal; use new RegExp.';
+    } else if (!fileToolsOn) s += ' File tools are off in Settings, so projects, files and notes are unavailable until that switch is on.';
+    if (referenceTurn || toolOn.reference) s += ' Call convert_units, calendar, lookup, or text_codec for a figure stored on this console. Use a reference line you are given and do not replace it.';
     return s;
   }
 
+  function userContent(text, clock, search, math, memory, ref) {
+    var body = evidence(text, clock, search, math, memory, ref);
+    var images = [];
+    for (var i = 0; i < attachments.length; i++) {
+      var item = attachments[i];
+      if (item.kind === 'image') {
+        if (visionOn) images.push(item.url);
+        else body += '\n\nThe user attached an image (' + item.name + '). This model has no image projector, so the picture was not sent.';
+      } else if (item.text) {
+        body += '\n\nAttached file ' + item.name + ':\n' + item.text;
+      }
+    }
+    if (!images.length) return body;
+    var parts = [{ type: 'text', text: body }];
+    for (var j = 0; j < images.length; j++) parts.push({ type: 'image_url', image_url: { url: images[j] } });
+    return parts;
+  }
   function evidence(text, clock, search, math, memory, ref) {
     var parts = [];
     if (memory) parts.push(memory);
@@ -462,26 +560,36 @@
       { type: 'function', function: { name: 'text_codec', description: 'Encode or measure text on this console. op is base64, unbase64, hex, sha256, or count. At most 8000 characters.', parameters: { type: 'object', properties: { op: { type: 'string' }, text: { type: 'string' } }, required: ['op', 'text'] } } }
     ];
   }
+  function findDef(name) {
+    for (var i = 0; i < toolDefs.length; i++) {
+      var def = toolDefs[i];
+      if (def && def.function && def.function.name === name) return def;
+    }
+    return null;
+  }
   function defsFor(kind) {
     var out = [];
-    if (kind === 'code') out = projectDefs();
-    else if (kind === 'search') {
-      var params = { type: 'object', properties: { url: { type: 'string', description: 'The address to open' } }, required: ['url'] };
-      for (var i = 0; i < toolDefs.length; i++) {
-        var def = toolDefs[i];
-        var name = def && def.function && def.function.name;
-        if (name === 'web_fetch' && def.function.parameters) params = def.function.parameters;
-      }
-      out.push({ type: 'function', function: { name: 'web_fetch', description: 'Open one http or https page and return its text and links.', parameters: params } });
+    function pushAll(list) { for (var i = 0; i < list.length; i++) out.push(list[i]); }
+    if (toolOn.clock) {
+      var clock = findDef('get_datetime');
+      out.push(clock || { type: 'function', function: { name: 'get_datetime', description: 'Read the console clock.', parameters: { type: 'object', properties: {} } } });
     }
-    if (fileToolsOn && kind !== 'code' && anyWord(String(asked || '').toLowerCase(), SHELF_WORDS)) {
+    if (toolOn.search) {
+      var search = findDef('web_search');
+      var fetchDef = findDef('web_fetch');
+      out.push(search || { type: 'function', function: { name: 'web_search', description: 'Search the web. Use the console clock date when the question is about today.', parameters: { type: 'object', properties: { query: { type: 'string' }, num_results: { type: 'integer' } }, required: ['query'] } } });
+      out.push(fetchDef || { type: 'function', function: { name: 'web_fetch', description: 'Open one http or https page and return its text and links.', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } });
+    }
+    if (toolOn.projects && fileToolsOn) pushAll(projectDefs());
+    if (fileToolsOn && (toolOn.files || toolOn.notes)) {
       var shelf = shelfDefs();
-      for (var s = 0; s < shelf.length; s++) out.push(shelf[s]);
+      for (var s = 0; s < shelf.length; s++) {
+        var shelfName = shelf[s].function.name;
+        if (toolOn.notes && shelfName.indexOf('memory_') === 0) out.push(shelf[s]);
+        if (toolOn.files && shelfName.indexOf('files_') === 0) out.push(shelf[s]);
+      }
     }
-    if (referenceTurn) {
-      var refs = referenceDefs();
-      for (var r = 0; r < refs.length; r++) out.push(refs[r]);
-    }
+    if (toolOn.reference) pushAll(referenceDefs());
     return out;
   }
 
@@ -653,7 +761,7 @@
       var rounds = 2;
       var batch = 2;
       if (offered(tools, 'project_review')) {
-        rounds = 8;
+        rounds = 10;
         batch = 4;
       } else if (offered(tools, 'files_list') || offered(tools, 'memory_forget')) {
         rounds = 3;
@@ -706,6 +814,7 @@
       if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
       if (!body) fail(holder, req.status === 0 ? 'The console did not answer.' : 'No answer. Check that a model is loaded on the console.');
       else {
+        fillAnswer(answer, body);
         history.push({ role: 'assistant', content: body });
         if (history.length > rememberCap()) history = history.slice(history.length - rememberCap());
       }
@@ -735,6 +844,56 @@
     turn = null;
     busy(false);
     bottom();
+  }
+  function fillAnswer(node, body) {
+    var fence = String.fromCharCode(96, 96, 96);
+    var parts = String(body || '').split(fence);
+    if (parts.length < 2) {
+      node.textContent = body;
+      return;
+    }
+    while (node.firstChild) node.removeChild(node.firstChild);
+    for (var i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        if (!parts[i]) continue;
+        var prose = document.createElement('div');
+        prose.className = 'prose';
+        prose.textContent = parts[i];
+        node.appendChild(prose);
+      } else {
+        var raw = parts[i];
+        var nl = raw.indexOf('\n');
+        var lang = nl >= 0 ? trim(raw.substring(0, nl)) : '';
+        var code = nl >= 0 && lang.length < 20 && lang.indexOf(' ') < 0 ? raw.substring(nl + 1) : raw;
+        if (code.charAt(code.length - 1) === '\n') code = code.substring(0, code.length - 1);
+        var wrap = document.createElement('div');
+        wrap.className = 'codewrap';
+        var bar = document.createElement('div');
+        bar.className = 'codebar';
+        var copy = document.createElement('button');
+        copy.type = 'button';
+        copy.textContent = 'Copy';
+        copy.onclick = (function (text, button) {
+          return function () {
+            var area = document.createElement('textarea');
+            area.value = text;
+            document.body.appendChild(area);
+            if (area.select) area.select();
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(area);
+            button.textContent = ok ? 'Copied' : 'Copy';
+          };
+        })(code, copy);
+        bar.appendChild(copy);
+        var pre = document.createElement('pre');
+        pre.className = 'code';
+        pre.textContent = code;
+        wrap.appendChild(bar);
+        wrap.appendChild(pre);
+        node.appendChild(wrap);
+      }
+    }
   }
 
   function rememberCap() {
@@ -766,6 +925,16 @@
   function takeSettings(data) {
     if (!data) return;
     if (typeof data.tools === 'boolean') fileToolsOn = data.tools;
+    if (!toolTouched) {
+      if (typeof data.web_search === 'boolean') toolOn.search = data.web_search;
+      if (typeof data.datetime === 'boolean') toolOn.clock = data.datetime;
+      if (typeof data.tools === 'boolean') {
+        toolOn.projects = data.tools;
+        toolOn.files = data.tools;
+        toolOn.notes = data.tools;
+      }
+      paintTools();
+    }
     if (typeof data.agent === 'string') agentMode = data.agent;
     if (typeof data.coordinator === 'string') agentCoordinator = data.coordinator;
     if (typeof data.worker === 'string') agentWorker = data.worker;
@@ -779,7 +948,17 @@
     var mine = document.createElement('div');
     mine.className = 'msg me';
     var bubble = document.createElement('div');
-    bubble.textContent = text;
+    var shown = text;
+    for (var a = 0; a < attachments.length; a++) shown += (shown ? '\n' : '') + '[' + attachments[a].name + ']';
+    bubble.textContent = shown;
+    for (var p = 0; p < attachments.length; p++) {
+      if (attachments[p].kind === 'image' && attachments[p].url) {
+        var pic = document.createElement('img');
+        pic.alt = attachments[p].name;
+        pic.src = attachments[p].url;
+        bubble.appendChild(pic);
+      }
+    }
     mine.appendChild(bubble);
     log.appendChild(mine);
     var bot = document.createElement('div');
@@ -1000,7 +1179,9 @@
       var prior = history.slice(0, history.length - 1);
       var messages = [{ role: 'system', content: systemText(kind) }];
       for (var i = 0; i < prior.length; i++) messages.push(prior[i]);
-      messages.push({ role: 'user', content: evidence(text, clockNote, searchNote, math, memoryNote, refNote) });
+      messages.push({ role: 'user', content: userContent(text, clockNote, searchNote, math, memoryNote, refNote) });
+      attachments = [];
+      paintChips();
       beginAgent(holder, messages, defsFor(kind));
     }
     function ask(clockNote, searchNote, refNote) {
@@ -1037,7 +1218,7 @@
     }
 
     function afterClock(clockNote, day, refNote) {
-      if (kind !== 'search') return ask(clockNote, '', refNote);
+      if (kind !== 'search' || !toolOn.search) return ask(clockNote, '', refNote);
       var query = text;
       if (day && text.indexOf(day) < 0) query = text + ' ' + day;
       var slot = addTool(holder.tools, 'Web search', 'Searching for “' + query + '”…', false);
@@ -1053,7 +1234,10 @@
 
     function begin(refNote) {
       if (math) addTool(holder.tools, 'Calculation', math.replace('Calculation: ', ''), false);
-      if (kind === 'none' || kind === 'code') return ask('', '', refNote);
+      if (kind === 'none' || kind === 'code' || !toolOn.clock) {
+        if (kind === 'search' && toolOn.search) return afterClock('', browserDay(), refNote);
+        return ask('', '', refNote);
+      }
       var slotClock = addTool(holder.tools, 'Date and time', 'Reading the console clock…', false);
       callTool('get_datetime', {}, function (error, data) {
         if (!turn || turn.cancelled) return finishStop(holder, '');
@@ -1100,7 +1284,11 @@
       var h = document.createElement('h1');
       h.textContent = 'No model loaded';
       var p = document.createElement('p');
-      p.textContent = 'Download one from Library, or open Settings and save a folder that already has models.';
+      p.textContent = 'Load a model already on this console. The library can download another one.';
+      var list = document.createElement('div');
+      list.className = 'ideas';
+      var status = document.createElement('p');
+      status.textContent = 'Looking for models…';
       var ideas = document.createElement('div');
       ideas.className = 'ideas';
       function choice(label, tab, folder) {
@@ -1114,14 +1302,90 @@
         };
         ideas.appendChild(b);
       }
-      choice('Download a model', 'library', false);
+      choice('Open the library', 'library', false);
       choice('Add a model folder', 'settings', true);
       empty.appendChild(h);
       empty.appendChild(p);
+      empty.appendChild(list);
+      empty.appendChild(status);
       empty.appendChild(ideas);
+      panelSend('GET', '/library', null, function (code, data) {
+        if (!data || !data.models) {
+          status.textContent = 'The library did not answer. Open the library tab to try again.';
+          empty.removeAttribute('data-idle');
+          return;
+        }
+        var ready = 0;
+        for (var i = 0; i < data.models.length; i++) if (data.models[i].fits && !data.models[i].current) ready++;
+        status.textContent = ready ? 'Load restarts the console. It takes about half a minute.' : 'Nothing is ready to load. Open the library to download a model.';
+        for (var j = 0; j < data.models.length; j++) {
+          (function (m) {
+            if (!m.fits || m.current) return;
+            var b = document.createElement('button');
+            b.className = 'idea';
+            b.type = 'button';
+            var label = m.label || 'model';
+            b.textContent = 'Load ' + label;
+            b.onclick = function () {
+              if (!window.confirm('Load ' + label + '? The console restarts.')) return;
+              b.disabled = true;
+              status.textContent = 'Restarting with ' + label + '.';
+              panelSend('POST', '/load', { path: m.file }, function (c, d) {
+                status.textContent = (d && (d.note || d.error)) || 'Load failed';
+                if (!(d && d.ok)) b.disabled = false;
+              });
+            };
+            list.appendChild(b);
+          })(data.models[j]);
+        }
+      });
     }
     var box = document.getElementById('input');
     if (box) box.placeholder = 'Load a model to chat';
+  }
+  function bindIdea(button) {
+    button.onclick = function () {
+      if (xhr || turn) return;
+      start(button.textContent);
+    };
+  }
+  function paintAsk(empty) {
+    while (empty.firstChild) empty.removeChild(empty.firstChild);
+    empty.removeAttribute('data-idle');
+    var h = document.createElement('h1');
+    h.textContent = 'Ask the console';
+    var p = document.createElement('p');
+    p.textContent = 'A question about today reads the clock on the PlayStation, then searches the web with that date, and answers from what came back. Ask it to code an app and the files land in Projects.';
+    var ideas = document.createElement('div');
+    ideas.className = 'ideas';
+    for (var i = 0; i < ASK_IDEAS.length; i++) {
+      var b = document.createElement('button');
+      b.className = 'idea';
+      b.type = 'button';
+      b.textContent = ASK_IDEAS[i];
+      bindIdea(b);
+      ideas.appendChild(b);
+    }
+    empty.appendChild(h);
+    empty.appendChild(p);
+    empty.appendChild(ideas);
+    var box = document.getElementById('input');
+    if (box) box.placeholder = 'Message';
+  }
+  function newChat() {
+    if (xhr || turn) return;
+    history = [];
+    asked = '';
+    attachments = [];
+    paintChips();
+    while (log.firstChild) log.removeChild(log.firstChild);
+    var empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.id = 'empty';
+    log.appendChild(empty);
+    if (modelReady === false) showNoModel();
+    else paintAsk(empty);
+    input.focus();
   }
 
   var info = new XMLHttpRequest();
@@ -1133,6 +1397,12 @@
       var name = id.split('/').pop().replace(/\.gguf$/, '').replace(/-(UD-)?(I?Q[0-9].*|BF16|F16|F32)$/i, '').replace(/-/g, ' ');
       document.getElementById('model').textContent = name;
       modelReady = true;
+      panelSend('GET', '/library', null, function (code, data) {
+        if (!data || !data.models) return;
+        for (var i = 0; i < data.models.length; i++) {
+          if (data.models[i].current) visionOn = !!data.models[i].vision;
+        }
+      });
     } catch (e) {
       modelReady = false;
       document.getElementById('model').textContent = 'No model loaded';
@@ -1173,7 +1443,8 @@
       return;
     }
     var text = trim(input.value);
-    if (!text) return;
+    if (!text && !attachments.length) return;
+    if (!text) text = 'Look at the attached files.';
     input.value = '';
     grow();
     start(text);
@@ -1233,13 +1504,15 @@
   function showTab(name) {
     document.getElementById('scroll').className = name === 'chat' ? 'scroll' : 'scroll off';
     document.getElementById('view-library').className = name === 'library' ? 'page' : 'page off';
+    document.getElementById('view-projects').className = name === 'projects' ? 'page' : 'page off';
     document.getElementById('view-settings').className = name === 'settings' ? 'page' : 'page off';
     document.body.className = name === 'chat' ? '' : 'away';
-    var ids = ['chat', 'library', 'settings'];
+    var ids = ['chat', 'library', 'projects', 'settings'];
     for (var i = 0; i < ids.length; i++) {
       document.getElementById('tab-' + ids[i]).className = ids[i] === name ? 'tab on' : 'tab';
     }
     if (name === 'library') loadLibrary();
+    if (name === 'projects') loadProjects();
     if (name === 'settings') loadSettings();
   }
   function loadLibrary() {
@@ -1268,6 +1541,7 @@
           if (m.current) {
             bits.push('running');
             loadedPath = m.file;
+            visionOn = !!m.vision;
           }
           meta.textContent = bits.join(' · ');
           var plan = document.createElement('p');
@@ -1467,7 +1741,15 @@
     box.onchange = function () {
       var body = {};
       body[key] = box.checked;
-      if (key === 'tools') fileToolsOn = box.checked;
+      if (key === 'tools') {
+        fileToolsOn = box.checked;
+        if (!toolTouched) {
+          toolOn.projects = box.checked;
+          toolOn.files = box.checked;
+          toolOn.notes = box.checked;
+        }
+        paintTools();
+      }
       saveSetting(body);
     };
     wrap.appendChild(box);
@@ -1654,6 +1936,7 @@
   }
   document.getElementById('tab-chat').onclick = function () { showTab('chat'); };
   document.getElementById('tab-library').onclick = function () { showTab('library'); };
+  document.getElementById('tab-projects').onclick = function () { showTab('projects'); };
   document.getElementById('tab-settings').onclick = function () { showTab('settings'); };
   document.getElementById('hf-go').onclick = searchHub;
   document.getElementById('hf-q').onkeydown = function (e) {
@@ -1667,14 +1950,283 @@
   };
 
   var ideas = document.querySelectorAll('.idea');
-  for (var k = 0; k < ideas.length; k++) {
-    ideas[k].onclick = function () {
-      if (xhr || turn) return;
-      start(this.textContent);
-    };
-  }
+  for (var k = 0; k < ideas.length; k++) bindIdea(ideas[k]);
 
   resumeHandoff();
+
+  function endsWith(text, suffix) {
+    text = String(text || '');
+    return text.length >= suffix.length && text.substring(text.length - suffix.length) === suffix;
+  }
+  function paintChips() {
+    var box = document.getElementById('chips');
+    if (!box) return;
+    while (box.firstChild) box.removeChild(box.firstChild);
+    for (var i = 0; i < attachments.length; i++) {
+      (function (item, at) {
+        var chip = document.createElement('div');
+        chip.className = 'chip';
+        if (item.kind === 'image' && item.url) {
+          var thumb = document.createElement('img');
+          thumb.alt = '';
+          thumb.src = item.url;
+          chip.appendChild(thumb);
+        }
+        var name = document.createElement('span');
+        name.textContent = item.name;
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.setAttribute('aria-label', 'Remove ' + item.name);
+        close.textContent = '\u00d7';
+        close.onclick = function () {
+          attachments.splice(at, 1);
+          paintChips();
+        };
+        chip.appendChild(name);
+        chip.appendChild(close);
+        box.appendChild(chip);
+      })(attachments[i], i);
+    }
+  }
+  function toolCount() {
+    var n = 0;
+    if (toolOn.search) n += 1;
+    if (toolOn.clock) n += 1;
+    if (toolOn.projects && fileToolsOn) n += 1;
+    if (toolOn.files && fileToolsOn) n += 1;
+    if (toolOn.notes && fileToolsOn) n += 1;
+    if (toolOn.reference) n += 1;
+    return n;
+  }
+  function paintTools() {
+    var panel = document.getElementById('tool-panel');
+    var toggle = document.getElementById('tool-toggle');
+    if (toggle) toggle.textContent = 'Tools ' + toolCount();
+    if (!panel) return;
+    while (panel.firstChild) panel.removeChild(panel.firstChild);
+    if (!fileToolsOn) {
+      var note = document.createElement('div');
+      note.className = 'menu-note';
+      note.textContent = 'Projects, files, and notes follow File tools in Settings.';
+      panel.appendChild(note);
+    }
+    var rows = [
+      ['search', 'Web search'],
+      ['clock', 'Date and time'],
+      ['projects', 'Projects'],
+      ['files', 'Files'],
+      ['notes', 'Notes'],
+      ['reference', 'Reference tables']
+    ];
+    for (var i = 0; i < rows.length; i++) {
+      (function (key, label) {
+        var line = document.createElement('label');
+        var box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = !!toolOn[key];
+        if ((key === 'projects' || key === 'files' || key === 'notes') && !fileToolsOn) {
+          box.disabled = true;
+          box.checked = false;
+        }
+        box.onchange = function () {
+          toolTouched = true;
+          toolOn[key] = box.checked;
+          if (toggle) toggle.textContent = 'Tools ' + toolCount();
+        };
+        line.appendChild(box);
+        line.appendChild(document.createTextNode(' ' + label));
+        panel.appendChild(line);
+      })(rows[i][0], rows[i][1]);
+    }
+  }
+  function readAttachment(file) {
+    if (!file) return;
+    if (attachments.length >= 4) {
+      window.alert('Four attachments at most.');
+      return;
+    }
+    var image = file.type && file.type.indexOf('image/') === 0;
+    if (image && file.size > 900000) {
+      window.alert(file.name + ' is too large. Use a picture under 900 KB.');
+      return;
+    }
+    if (!image && file.size > 200000) {
+      window.alert(file.name + ' is too large. Use a text file under 200 KB.');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      if (attachments.length >= 4) return;
+      if (image) attachments.push({ kind: 'image', name: file.name || 'image', url: String(reader.result || '') });
+      else {
+        var text = String(reader.result || '');
+        if (text.length > 12000) text = text.substring(0, 12000);
+        attachments.push({ kind: 'text', name: file.name || 'file', text: text });
+      }
+      paintChips();
+    };
+    if (image) reader.readAsDataURL(file);
+    else reader.readAsText(file);
+  }
+  function hidePreview() {
+    var frame = document.getElementById('proj-preview');
+    if (!frame) return;
+    frame.className = 'preview off';
+    try { frame.srcdoc = ''; } catch (e) {}
+  }
+  function showProjectText(path, text) {
+    var view = document.getElementById('proj-view');
+    var frame = document.getElementById('proj-preview');
+    if (view) view.textContent = text || '';
+    var lower = String(path || '').toLowerCase();
+    var page = endsWith(lower, '.html') || endsWith(lower, '.svg');
+    if (!page || !text || !frame) {
+      hidePreview();
+      return;
+    }
+    frame.className = 'preview';
+    try { frame.srcdoc = text; } catch (e2) { frame.className = 'preview off'; }
+  }
+  function loadProjects() {
+    var status = document.getElementById('proj-status');
+    var list = document.getElementById('proj-list');
+    var files = document.getElementById('proj-files');
+    var view = document.getElementById('proj-view');
+    if (status) status.textContent = 'Loading projects\u2026';
+    if (list) list.innerHTML = '';
+    if (files) files.innerHTML = '';
+    if (view) view.textContent = '';
+    hidePreview();
+    panelSend('POST', '/project', { tool: 'list', name: '' }, function (code, data) {
+      if (!data || data.error) {
+        if (status) status.textContent = (data && data.error) || 'Projects did not answer. Turn on file tools in Settings.';
+        return;
+      }
+      var projects = data.projects || [];
+      if (status) status.textContent = projects.length ? (projects.length + ' projects in /data/ArtemisLM/projects.') : 'No projects yet. Create one here, or ask chat to code an app.';
+      for (var i = 0; i < projects.length; i++) {
+        (function (p) {
+          var card = document.createElement('div');
+          card.className = 'card';
+          var title = document.createElement('h2');
+          title.textContent = p.name;
+          var meta = document.createElement('p');
+          meta.textContent = p.kind || '';
+          var buttons = document.createElement('div');
+          buttons.className = 'rowbtns';
+          var open = document.createElement('button');
+          open.type = 'button';
+          open.className = 'primary';
+          open.textContent = 'Files';
+          open.onclick = function () { loadProjectFiles(p.name); };
+          buttons.appendChild(open);
+          card.appendChild(title);
+          card.appendChild(meta);
+          card.appendChild(buttons);
+          if (list) list.appendChild(card);
+        })(projects[i]);
+      }
+    });
+  }
+  function loadProjectFiles(name) {
+    var status = document.getElementById('proj-status');
+    var files = document.getElementById('proj-files');
+    var view = document.getElementById('proj-view');
+    if (status) status.textContent = 'Opening ' + name + '\u2026';
+    if (files) files.innerHTML = '';
+    if (view) view.textContent = '';
+    hidePreview();
+    panelSend('POST', '/project', { tool: 'list', name: name }, function (code, data) {
+      if (!data || data.error) {
+        if (status) status.textContent = (data && data.error) || 'That project did not open.';
+        return;
+      }
+      var names = data.files || [];
+      if (status) status.textContent = name + (data.kind ? ' \u00b7 ' + data.kind : '') + ' \u00b7 ' + names.length + ' files';
+      for (var i = 0; i < names.length; i++) {
+        (function (path) {
+          var card = document.createElement('div');
+          card.className = 'card';
+          var title = document.createElement('h2');
+          title.textContent = path;
+          var buttons = document.createElement('div');
+          buttons.className = 'rowbtns';
+          var open = document.createElement('button');
+          open.type = 'button';
+          open.textContent = 'Read';
+          open.onclick = function () {
+            panelSend('POST', '/project', { tool: 'read', name: name, path: path }, function (c, d) {
+              if (d && typeof d.text === 'string') showProjectText(path, d.text);
+              else if (view) view.textContent = (d && d.error) || 'The file did not open.';
+            });
+          };
+          buttons.appendChild(open);
+          card.appendChild(title);
+          card.appendChild(buttons);
+          if (files) files.appendChild(card);
+        })(names[i]);
+      }
+    });
+  }
+  function createProject() {
+    var status = document.getElementById('proj-status');
+    var nameBox = document.getElementById('proj-name');
+    var kindBox = document.getElementById('proj-kind');
+    var name = trim(nameBox ? nameBox.value : '');
+    var kind = kindBox ? kindBox.value : 'static-page';
+    if (!name) {
+      if (status) status.textContent = 'Type a project name. Start with a letter or a digit. Use letters, digits, _ or -.';
+      return;
+    }
+    if (status) status.textContent = 'Creating ' + name + '\u2026';
+    panelSend('POST', '/project', { tool: 'create', name: name, kind: kind }, function (code, data) {
+      if (!data || data.error) {
+        if (status) status.textContent = (data && data.error) || 'Could not create that project. Turn on file tools in Settings.';
+        return;
+      }
+      if (nameBox) nameBox.value = '';
+      loadProjects();
+      loadProjectFiles(name);
+    });
+  }
+  paintTools();
+  document.getElementById('tool-toggle').onclick = function (e) {
+    var menu = document.getElementById('tool-menu');
+    menu.className = menu.className === 'menu open' ? 'menu' : 'menu open';
+    if (e && e.stopPropagation) e.stopPropagation();
+  };
+  document.getElementById('attach-btn').onclick = function () {
+    document.getElementById('attach-file').click();
+  };
+  document.getElementById('attach-file').onchange = function () {
+    var inputFile = document.getElementById('attach-file');
+    var list = inputFile.files;
+    for (var i = 0; list && i < list.length; i++) readAttachment(list[i]);
+    inputFile.value = '';
+  };
+  document.getElementById('new-chat').onclick = newChat;
+  document.getElementById('proj-new').onclick = createProject;
+  document.getElementById('proj-name').onkeydown = function (e) {
+    e = e || window.event;
+    var key = e.key || e.keyCode;
+    if (key === 'Enter' || key === 13) {
+      if (e.preventDefault) e.preventDefault();
+      createProject();
+      return false;
+    }
+  };
+  if (document.addEventListener) {
+    document.addEventListener('click', function (e) {
+      var menu = document.getElementById('tool-menu');
+      if (!menu || menu.className !== 'menu open') return;
+      var t = e && (e.target || e.srcElement);
+      while (t) {
+        if (t === menu) return;
+        t = t.parentNode;
+      }
+      menu.className = 'menu';
+    }, false);
+  }
 
   // A paper plane on a ring, drawn on this device. The console keeps its memory for the model.
   (function sky() {
@@ -1705,7 +2257,7 @@
       canvas.style.height = h + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
-    function project(x, y, z, rot, cx, cy) {
+  function project(x, y, z, rot, cx, cy) {
       var c = Math.cos(rot), s = Math.sin(rot);
       var rx = x * c - z * s;
       var rz = x * s + z * c;

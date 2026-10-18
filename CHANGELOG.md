@@ -1,12 +1,32 @@
 # Changelog
 
-ArtemisLM PS5 0.12.4, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.4.zip`.
-`contentVersion` is `01.012.004`. A newer release installs from Settings, or by
+ArtemisLM PS5 0.12.5, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.5.zip`.
+`contentVersion` is `01.012.005`. A newer release installs from Settings, or by
 copying the `PPSA98010` folder over the installed one.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.5] - 2026-10-19
+
+### Added
+
+- With nothing loaded, the phone page lists the models already on the console
+  and can load one. It also opens the library, or Settings to add a folder.
+- Tools sits above the message box. Search, the clock, projects, files, notes,
+  and the reference tables start on. Attach adds a picture or a text file. A
+  picture is sent when the loaded model has an image projector. New clears the
+  chat.
+- Projects lists `/data/ArtemisLM/projects`, can create a folder, and can read
+  a file. A web page can be previewed there. The console still does not start
+  Node or Python.
+
+### Fixed
+
+- Asking the chat to code an app uses the project tools. A review that says
+  this console cannot start Node or Python means the process is not launched.
+  The files are still saved.
 
 ## [0.12.4] - 2026-10-19
 

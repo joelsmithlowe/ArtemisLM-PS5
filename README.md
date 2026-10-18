@@ -172,7 +172,7 @@ A row is lit when it matches the model that is loaded. The panel on the right co
 
 **Settings** has nine categories: Startup, Library, Context, Sampling, Chat, Agent, Sound and storage, Diagnostics, and Credits. A value that leaves the measured default is marked, and that category gets a mark on the left. Context, cache, flash attention, the prompt batch, chats at once, memory fit, and sampling apply at the next load. File tools, web search, the clock, how many search hits to keep, and how many messages the phone sends apply to the next question. Credits is the list of the work this build stands on. Diagnostics shows the app log or the server log.
 
-The phone page, `http://<console>:8081`, has three tabs: Chat, Library, and Settings. Settings uses the same groups. An extra model folder can be typed there. It has to be an existing folder under `/data` or `/mnt`. Clearing the scratch folder is on the television only.
+The phone page, `http://<console>:8081`, has four tabs: Chat, Library, Projects, and Settings. With nothing loaded, Chat lists the models already on the console and can load one. Tools sits above the message box and starts with search, the clock, projects, files, notes, and the reference tables on. Attach adds a picture or a text file. A picture is sent only when the loaded model has an image projector. New clears the chat. Projects lists `/data/ArtemisLM/projects`, can create a folder, and can preview a web page. The console stores and reviews those files. It does not start Node or Python. Settings uses the same groups. An extra model folder can be typed there. It has to be an existing folder under `/data` or `/mnt`. Clearing the scratch folder is on the television only.
 
 ## LM Studio
 
