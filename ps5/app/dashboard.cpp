@@ -2002,6 +2002,10 @@ void Dashboard::draw_api(gfx::DrawList & l) const {
         loaded ? "Any device on this network can call it, with any model name: the loaded one answers."
                : "Nothing is loaded. Open this address to download a model or add a folder.",
         kLeft, 360, 22, kInk3);
+    const std::string mcp = live_.address.empty()
+                                ? std::string("port ") + std::to_string(kLibraryPort) + ", path /mcp"
+                                : "http://" + live_.address + ":" + std::to_string(kLibraryPort) + "/mcp";
+    put(l, f.regular, "LM Studio agent  " + mcp, kLeft, 400, 22, kInk3);
 
     struct Ep { const char * method; const char * path; const char * about; bool decision; };
     const Ep all[] = {

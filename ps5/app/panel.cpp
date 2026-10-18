@@ -2,6 +2,7 @@
 #include "panel.hpp"
 #include "ports.hpp"
 #include "version.hpp"
+#include "lmstudio.hpp"
 
 #include "fetch.hpp"
 #include "library.hpp"
@@ -27,6 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <mutex>
@@ -42,6 +44,7 @@ constexpr const char * kSettingsPath = "/data/ArtemisLM/settings.json";
 constexpr const char * kHub = "https://huggingface.co";
 
 std::mutex g_mu;
+std::mutex g_panel;  // short library calls. An agent ask does not hold this.
 Market * g_market = nullptr;
 double g_budget = 0;
 std::string g_running;
@@ -121,11 +124,12 @@ void send_all(int fd, const std::string & bytes) {
 }
 
 void reply(int fd, int code, const std::string & body) {
-    const char * text = code == 200 ? "OK" : code == 204 ? "No Content" : code == 400 ? "Bad Request" : "Error";
+    const char * text = code == 200 ? "OK" : code == 204 ? "No Content" : code == 202 ? "Accepted"
+                      : code == 400 ? "Bad Request" : code == 405 ? "Method Not Allowed" : "Error";
     const std::string head = "HTTP/1.0 " + std::to_string(code) + " " + text +
                              "\r\nAccess-Control-Allow-Origin: *\r\n"
                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-                             "Access-Control-Allow-Headers: Content-Type\r\n"
+                             "Access-Control-Allow-Headers: Content-Type, Authorization, Accept, MCP-Protocol-Version\r\n"
                              "Content-Type: application/json\r\nContent-Length: " +
                              std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
     send_all(fd, head);
@@ -227,10 +231,12 @@ std::string catalog_json() {
 std::string artemis_json() {
     double budget = 0;
     std::string running;
+    std::string agent = "off";
     {
         std::lock_guard<std::mutex> lock(g_mu);
         budget = g_budget;
         running = g_running;
+        agent = load_settings(kSettingsPath).agent;
     }
     const std::string ip = local_address();
     nlohmann::json out = {
@@ -239,10 +245,13 @@ std::string artemis_json() {
         { "chat_port", kChatPort },
         { "library_port", kLibraryPort },
         { "budget_gib", budget },
+        { "agent", agent },
         { "loaded", running.empty() ? nlohmann::json(nullptr) : nlohmann::json(running) },
+        { "note", "One model stays on the GPU. Any model name works on the chat port. LM Studio can use the mcp address." },
     };
     if (!ip.empty()) {
         out["chat"] = std::string("http://") + ip + ":" + std::to_string(kChatPort) + "/v1";
+        out["mcp"] = std::string("http://") + ip + ":" + std::to_string(kLibraryPort) + "/mcp";
     }
     return out.dump();
 }
@@ -658,6 +667,11 @@ void handle(int fd, const std::string & method, const std::string & path, const 
         out = act_unload();
     } else if (method == "GET" && route == "/update") {
         out = update_json();
+    } else if (method == "GET" && route == "/v1/agent") {
+        out = artemis_json();
+    } else if (method == "GET" && route == "/mcp") {
+        code = 405;
+        out = "{\"note\":\"POST JSON-RPC here. LM Studio uses this path as an agent.\"}";
     } else if (method == "POST" && route == "/update") {
         const nlohmann::json j = nlohmann::json::parse(body.empty() ? "{}" : body, nullptr, false);
         if (j.is_object() && j.contains("install") && j["install"].is_boolean() && j["install"].get<bool>()) {
@@ -707,7 +721,7 @@ std::string read_request(int fd, std::string * method, std::string * path, std::
     if (at != std::string::npos) {
         length = (size_t) std::strtoul(headers.c_str() + at + key.size(), nullptr, 10);
     }
-    if (length > 65536) {
+    if (length > 262144) {
         return "body too large";
     }
     *body = raw.substr(head + 4);
@@ -722,6 +736,193 @@ std::string read_request(int fd, std::string * method, std::string * path, std::
         body->resize(length);
     }
     return {};
+}
+
+std::string lmstudio_tool(const std::string & name, const nlohmann::json & args, std::string * error) {
+    if (name == "artemis_status") {
+        Settings s;
+        double budget = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            s = load_settings(kSettingsPath);
+            budget = g_budget;
+        }
+        const nlohmann::json info = nlohmann::json::parse(artemis_json(), nullptr, false);
+        std::string text = info.value("name", "ArtemisLM PS5");
+        text += " ";
+        text += info.value("version", "");
+        text += "\nLoaded: ";
+        text += info.contains("loaded") && info["loaded"].is_string() ? info["loaded"].get<std::string>() : "none";
+        text += "\nAgent mode: " + info.value("agent", "off") + "\n";
+        if (info.contains("chat") && info["chat"].is_string()) {
+            text += "Chat: " + info["chat"].get<std::string>() + "\n";
+        }
+        if (info.contains("mcp") && info["mcp"].is_string()) {
+            text += "MCP: " + info["mcp"].get<std::string>() + "\n";
+        }
+        text += agent_note_for(s, budget);
+        return text;
+    }
+    if (name == "artemis_models") {
+        const nlohmann::json catalog = nlohmann::json::parse(catalog_json(), nullptr, false);
+        if (!catalog.contains("data") || !catalog["data"].is_array() || catalog["data"].empty()) {
+            return "No models in the library.";
+        }
+        std::string text;
+        for (const auto & model : catalog["data"]) {
+            const nlohmann::json extra = model.contains("artemislm") && model["artemislm"].is_object() ? model["artemislm"]
+                                                                                                      : nlohmann::json::object();
+            if (!text.empty()) {
+                text += "\n";
+            }
+            text += model.value("id", "model");
+            if (extra.value("loaded", false)) {
+                text += "  loaded";
+            }
+            text += extra.value("fits", false) ? "  fits" : "  does not fit";
+            if (model.contains("context_length") && model["context_length"].is_number()) {
+                text += "  ctx " + std::to_string(model["context_length"].get<int>());
+            }
+            if (extra.contains("path") && extra["path"].is_string()) {
+                text += "  " + extra["path"].get<std::string>();
+            }
+        }
+        return text;
+    }
+    if (name == "artemis_ask") {
+        Settings s;
+        std::string running;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            s = load_settings(kSettingsPath);
+            running = g_running;
+        }
+        if (running.empty()) {
+            if (error) {
+                *error = "No model loaded. Open Library on the console.";
+            }
+            return {};
+        }
+        const ModelInfo info = read_model_info(running);
+        if (!info.decision.empty()) {
+            if (error) {
+                *error = "That model does not chat.";
+            }
+            return {};
+        }
+        const AskBuilt built = build_ask(args, s);
+        if (!built.ok) {
+            if (error) {
+                *error = built.error;
+            }
+            return {};
+        }
+        const AskResult got = run_ask(kChatPort, built);
+        if (got.answer.empty()) {
+            if (error) {
+                *error = got.error.empty() ? "The model did not answer" : got.error;
+            }
+            return {};
+        }
+        std::string text;
+        if (!got.plan.empty()) {
+            text += "Plan:\n" + got.plan + "\n\n";
+        }
+        text += got.answer;
+        if (s.agent == "handoff") {
+            text += "\n\nHand off restarts the app from the phone page. This answer stays on the loaded model.";
+        }
+        return text;
+    }
+    if (name == "artemis_load") {
+        const std::string raw = act_load(nlohmann::json{ { "path", args.value("path", "") } }.dump());
+        const nlohmann::json got = nlohmann::json::parse(raw, nullptr, false);
+        const std::string note = got.is_object() ? got.value("error", got.value("note", "")) : "";
+        if (note == "That model is already loaded") {
+            return note;
+        }
+        if (got.is_object() && got.contains("error")) {
+            if (error) {
+                *error = note.empty() ? "The console could not start the load" : note;
+            }
+            return {};
+        }
+        return note.empty() ? "The console is restarting with this model" : note;
+    }
+    if (error) {
+        *error = "That tool is not on this console";
+    }
+    return {};
+}
+
+std::string agent_post(const std::string & body) {
+    const nlohmann::json in = nlohmann::json::parse(body.empty() ? "{}" : body, nullptr, false);
+    Settings s;
+    std::string running;
+    {
+        std::lock_guard<std::mutex> lock(g_mu);
+        s = load_settings(kSettingsPath);
+        running = g_running;
+    }
+    if (running.empty()) {
+        return "{\"error\":\"No model loaded\"}";
+    }
+    const ModelInfo info = read_model_info(running);
+    if (!info.decision.empty()) {
+        return "{\"error\":\"That model does not chat\"}";
+    }
+    const AskBuilt built = build_ask(in, s);
+    if (!built.ok) {
+        return nlohmann::json{ { "error", built.error } }.dump();
+    }
+    const AskResult got = run_ask(kChatPort, built);
+    if (got.answer.empty()) {
+        return nlohmann::json{ { "error", got.error.empty() ? "The model did not answer" : got.error } }.dump();
+    }
+    return ask_json(got, running);
+}
+
+void reply_mcp(int fd, const McpReply & got) {
+    if (got.status == 202) {
+        send_all(fd, "HTTP/1.0 202 Accepted\r\nAccess-Control-Allow-Origin: *\r\n"
+                     "MCP-Protocol-Version: 2025-03-26\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        return;
+    }
+    const char * text = got.status == 400 ? "Bad Request" : "OK";
+    const std::string head = "HTTP/1.0 " + std::to_string(got.status) + " " + text +
+                             "\r\nAccess-Control-Allow-Origin: *\r\n"
+                             "Access-Control-Allow-Headers: Content-Type, Authorization, Accept, MCP-Protocol-Version\r\n"
+                             "MCP-Protocol-Version: 2025-03-26\r\n"
+                             "Content-Type: application/json\r\nContent-Length: " +
+                             std::to_string(got.body.size()) + "\r\nConnection: close\r\n\r\n" + got.body;
+    send_all(fd, head);
+}
+
+void connection(int fd) {
+    try {
+        timeval tv = { 8, 0 };
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        std::string method, path, body, error = read_request(fd, &method, &path, &body);
+        if (!error.empty()) {
+            reply(fd, 400, std::string("{\"error\":\"") + error + "\"}");
+        } else {
+            const size_t q = path.find('?');
+            const std::string route = path.substr(0, q);
+            if (method == "POST" && route == "/mcp") {
+                reply_mcp(fd, mcp_handle(body, lmstudio_tool));
+            } else if (method == "POST" && route == "/v1/agent") {
+                const std::string out = agent_post(body);
+                reply(fd, out.rfind("{\"error\"", 0) == 0 ? 400 : 200, out);
+            } else {
+                std::lock_guard<std::mutex> lock(g_panel);
+                handle(fd, method, path, body);
+            }
+        }
+    } catch (const std::exception &) {
+        reply(fd, 500, "{\"error\":\"The library could not answer\"}");
+    }
+    close(fd);
 }
 
 void serve() {
@@ -750,16 +951,7 @@ void serve() {
         if (fd < 0) {
             continue;
         }
-        timeval tv = { 8, 0 };
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-        std::string method, path, body, error = read_request(fd, &method, &path, &body);
-        if (error.empty()) {
-            handle(fd, method, path, body);
-        } else {
-            reply(fd, 400, std::string("{\"error\":\"") + error + "\"}");
-        }
-        close(fd);
+        std::thread(connection, fd).detach();
     }
 }
 

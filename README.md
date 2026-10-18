@@ -25,7 +25,9 @@ model. A research question also reads the text of one page. Settings on the tele
 phone page cover context, flash attention, the prompt batch, and how much spare memory to keep.
 Measured is the spare this console was tested with. Agent mode names a coordinator and a worker.
 The console keeps one model on the GPU. Plan writes a short plan and then the answer on the loaded
-model. Hand off, from the page, restarts onto the worker after the plan.
+model. Hand off, from the page, restarts onto the worker after the plan. LM Studio can call the
+console as an agent at `http://<PS5>:47282/mcp`, or by launching `scripts/lmstudio/artemis-mcp.mjs`.
+An OpenAI client still uses port 47281.
 
 <p align="center">
   <img src="docs/media/artemislm-ps5-mark.gif" width="720" alt="ArtemisLM PS5">

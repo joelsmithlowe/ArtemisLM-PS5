@@ -108,6 +108,53 @@ restart the app. A model that does not fit is refused. With nothing loaded,
 port 47281 still serves the page, `GET /v1/models` is an empty list, and
 `GET /health` answers 503 until a model is ready.
 
+## LM Studio
+
+LM Studio does not add the PlayStation as one of its own models. It calls the
+console as an agent, through MCP. One model stays on the GPU. Any model name
+on the chat port reaches the model that is loaded.
+
+The script below works with a console on 0.10.0. LM Studio launches it.
+Program, Install, Edit mcp.json. Use the console's address:
+
+```json
+{
+  "mcpServers": {
+    "artemis-ps5": {
+      "command": "node",
+      "args": ["D:/path/to/PS5LM-0.9.0/scripts/lmstudio/artemis-mcp.mjs"],
+      "env": { "ARTEMIS_HOST": "192.168.1.19" }
+    }
+  }
+}
+```
+
+The model in LM Studio then has four tools: `artemis_status`, `artemis_models`,
+`artemis_ask`, and `artemis_load`. Ask sends the question to port 47281. When
+Agent mode on the console is Plan or Hand off, the script writes a short plan
+first and then the answer, both on the loaded model. Hand off does not restart
+from this script. Load restarts the app onto another file, so the next ask
+should wait until status shows that model.
+
+The app also serves MCP on the library port once this source is installed:
+
+```json
+{
+  "mcpServers": {
+    "artemis-ps5": { "url": "http://192.168.1.19:47282/mcp" }
+  }
+}
+```
+
+`POST /v1/agent` on that same port takes `prompt`, `system`, `messages`,
+`max_tokens`, and `plan`, and returns an OpenAI chat completion plus an
+`artemis` object with the plan. `GET /v1/agent` and `GET /artemis` name the
+chat address and the MCP address.
+
+To use the PlayStation as the model instead of an agent, point an OpenAI
+client at `http://192.168.1.19:47281/v1`. LM Studio's own chat still runs its
+local model and reaches the console through the tools above.
+
 ## Checked on the console
 
 The task, in a folder holding a two-line `hello.py`: "In hello.py, add a

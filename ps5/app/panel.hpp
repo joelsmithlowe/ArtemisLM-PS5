@@ -1,5 +1,6 @@
 // A small HTTP API on port 47282 for the phone and desktop page: the model
-// library, settings, Hugging Face search and downloads. Chat stays on 47281.
+// library, settings, Hugging Face search, downloads, and LM Studio's agent.
+// Chat stays on 47281. MCP is POST /mcp on this port.
 // With no model loaded, page_start() serves that same page on 47281. It does
 // not load a model and it does not start llama-server.
 // The thread is its own; the dashboard reads panel_generation() and reloads
