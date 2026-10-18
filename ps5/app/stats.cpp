@@ -136,9 +136,7 @@ long json_int(const std::string & text, const char * key) {
 
 }  // namespace
 
-std::string http_get(int port, const char * path, int timeout_s) { return http_post(port, path, {}, timeout_s); }
-
-std::string http_post(int port, const char * path, const std::string & body, int timeout_s) {
+static std::string http_exchange(uint32_t addr_n, int port, const char * path, const std::string & body, int timeout_s) {
     const int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         return {};
@@ -152,7 +150,7 @@ std::string http_post(int port, const char * path, const std::string & body, int
 #endif
     addr.sin_family      = AF_INET;
     addr.sin_port        = htons((uint16_t) port);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_addr.s_addr = addr_n;
     std::string out;
     if (connect(fd, (sockaddr *) &addr, sizeof(addr)) == 0) {
         std::string req = std::string(body.empty() ? "GET " : "POST ") + path + " HTTP/1.0\r\nHost: localhost\r\n";
@@ -172,6 +170,22 @@ std::string http_post(int port, const char * path, const std::string & body, int
     close(fd);
     const size_t at = out.find("\r\n\r\n");
     return at == std::string::npos ? std::string() : out.substr(at + 4);
+}
+
+std::string http_get(int port, const char * path, int timeout_s) {
+    return http_exchange(htonl(INADDR_LOOPBACK), port, path, {}, timeout_s);
+}
+
+std::string http_get_host(const char * ipv4, int port, const char * path, int timeout_s) {
+    in_addr address = {};
+    if (!ipv4 || inet_pton(AF_INET, ipv4, &address) != 1) {
+        return {};
+    }
+    return http_exchange(address.s_addr, port, path, {}, timeout_s);
+}
+
+std::string http_post(int port, const char * path, const std::string & body, int timeout_s) {
+    return http_exchange(htonl(INADDR_LOOPBACK), port, path, body, timeout_s);
 }
 
 double metric(const std::string & text, const char * name) {

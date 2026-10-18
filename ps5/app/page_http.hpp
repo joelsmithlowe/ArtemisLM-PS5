@@ -1,4 +1,4 @@
-// Which idle request on port 47281 is the phone page, and which address is safe to print.
+// Which idle request on port 8081 is the phone page, and which address is safe to print.
 // The page is GET / . GET /v1 is only the API prefix, so a browser that opens it is sent to /.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later

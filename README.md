@@ -29,7 +29,7 @@ Measured is the spare this console was tested with. Agent mode names a coordinat
 The console keeps one model on the GPU. Plan writes a short plan and then the answer on the loaded
 model. Hand off, from the page, restarts onto the worker after the plan. LM Studio does not take
 the PlayStation as one of its own models. It calls the console as an agent at
-`http://<PS5>:47282/mcp`. The steps are [below](#lm-studio). An OpenAI client still uses port 47281.
+`http://<PS5>:8082/mcp`. The steps are [below](#lm-studio). An OpenAI client still uses port 8081.
 
 <p align="center">
   <img src="docs/media/artemislm-ps5-mark.gif" width="720" alt="ArtemisLM PS5">
@@ -47,9 +47,9 @@ the PlayStation as one of its own models. It calls the console as an agent at
   shared memory for the model and its context. Every architecture and quantization llama.cpp knows
   comes along. Every layer stays on the GPU.
 - **It answers your network.** OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages` (Claude Code
-  works against it) and a chat page in any browser. Point a client at `http://<console>:47281` and use
+  works against it) and a chat page in any browser. Point a client at `http://<console>:8081` and use
   any model name: the loaded one answers. With nothing loaded, that address still opens the page, so a
-  model can be downloaded or a folder added. The paths are unchanged. Port 47282 is the library: it
+  model can be downloaded or a folder added. The paths are unchanged. Port 8082 is the library: it
   lists models, loads and unloads, saves settings, and answers `POST /mcp`, `POST /v1/agent`, and
   `POST /reference`.
 - **It decides, too.** Load a decision model and the console answers TypeSafe's `/v1/systemone`:
@@ -83,7 +83,7 @@ generated. The request is `/v1/systemone`, the API [Ollaya](https://github.com/o
 serves on a PC.
 
 ```sh
-curl http://<console>:47281/v1/systemone -H 'Content-Type: application/json' -d '{
+curl http://<console>:8081/v1/systemone -H 'Content-Type: application/json' -d '{
   "state": "I was charged twice this month. Refund me or I cancel.",
   "questions": {
     "intent": {"type": "choice", "instructions": "What does the customer want?",
@@ -112,13 +112,13 @@ You need a PS5 on firmware 7.00 to 13.60, jailbroken, with these payloads loaded
 2. Copy the `PPSA98010` folder to `/data/homebrew` over FTP. ShadowMountPlus adds **ArtemisLM PS5** to the
    home screen. PS5LM can stay installed beside it.
 3. Open ArtemisLM PS5. The first launch creates `/data/ArtemisLM/models`. With nothing loaded, open
-   `http://<console>:47281`. Library can download a model, and Settings can add a folder that already
+   `http://<console>:8081`. Library can download a model, and Settings can add a folder that already
    has one. A model can also come from **Models > Suggested**, or from a `.gguf` copied into that
    folder, or into `ArtemisLM/models` on a USB drive. A model already in
    `/data/PS5LM/models` (PS5LM or PS5LM Plus) is read too. **Settings > Library** can copy
    those files into `/data/ArtemisLM/models` and delete the old ones.
 4. Load it. Once Home says Ready, the same address is the chat, or point your OpenAI or
-   Anthropic client at it. Library and Settings on that page use port 47282 on the same console.
+   Anthropic client at it. Library and Settings on that page use port 8082 on the same console.
    A question about today uses the console clock, then the web search. A plain sum is worked out first.
    A conversion, a calendar date, a physical constant, an element, or an HTTP status comes from a
    small table kept in the app. That table is not downloaded and it is not stored under `/data`.
@@ -155,7 +155,7 @@ L1 and R1 move along the bottom: **Home**, **Models**, **API**, **Console**, **S
 
 **Models** has four lists: on this PS5, Suggested, Search, and Downloads. Search steps through Popular, Qwen, Gemma, Llama, Mistral, Phi, and Granite. Square on a file checks whether it fits. A download that needs the memory asks before it unloads the model that is loaded.
 
-**API** is the address page. With nothing loaded it prints the page, `http://<console>:47281`. With a model loaded it prints the API base, `http://<console>:47281/v1`. Under that, the LM Studio agent is `http://<console>:47282/mcp`. Opening `/v1` in a browser with nothing loaded is sent to the page. Six rows are the chat port:
+**API** is the address page. With nothing loaded it prints the page, `http://<console>:8081`. With a model loaded it prints the API base, `http://<console>:8081/v1`. Under that, the LM Studio agent is `http://<console>:8082/mcp`. Opening `/v1` in a browser with nothing loaded is sent to the page. Six rows are the chat port:
 
 | | | |
 |---|---|---|
@@ -166,13 +166,13 @@ L1 and R1 move along the bottom: **Home**, **Models**, **API**, **Console**, **S
 | GET | `/v1/models` | The loaded model. An empty list when nothing is loaded |
 | GET | `/health` | Ready, or 503 while nothing is loaded |
 
-A row is lit when it matches the model that is loaded. The panel on the right counts how many answers have been served and names the two library calls that do not fit on that list: `POST /v1/agent` and `POST /reference`, both on port 47282. An example curl is drawn under that. With nothing loaded, the same panel says the page is open and repeats the setup line.
+A row is lit when it matches the model that is loaded. The panel on the right counts how many answers have been served and names the two library calls that do not fit on that list: `POST /v1/agent` and `POST /reference`, both on port 8082. An example curl is drawn under that. With nothing loaded, the same panel says the page is open and repeats the setup line.
 
 **Console** charts temperature, power, GPU, and CPU for the last two minutes or the last hour. The header reads Cool, Warm from 70°C, or Hot from 85°C. Hot is a label on the screen. It is not a point where the app shuts down.
 
 **Settings** has nine categories: Startup, Library, Context, Sampling, Chat, Agent, Sound and storage, Diagnostics, and Credits. A value that leaves the measured default is marked, and that category gets a mark on the left. Context, cache, flash attention, the prompt batch, chats at once, memory fit, and sampling apply at the next load. File tools, web search, the clock, how many search hits to keep, and how many messages the phone sends apply to the next question. Credits is the list of the work this build stands on. Diagnostics shows the app log or the server log.
 
-The phone page, `http://<console>:47281`, has three tabs: Chat, Library, and Settings. Settings uses the same groups. An extra model folder can be typed there. It has to be an existing folder under `/data` or `/mnt`. Clearing the scratch folder is on the television only.
+The phone page, `http://<console>:8081`, has three tabs: Chat, Library, and Settings. Settings uses the same groups. An extra model folder can be typed there. It has to be an existing folder under `/data` or `/mnt`. Clearing the scratch folder is on the television only.
 
 ## LM Studio
 
@@ -184,7 +184,7 @@ Open **Program** in the right-hand sidebar, then **Install**, then **Edit mcp.js
 {
   "mcpServers": {
     "artemis-ps5": {
-      "url": "http://192.168.1.19:47282/mcp"
+      "url": "http://192.168.1.19:8082/mcp"
     }
   }
 }
@@ -205,9 +205,9 @@ Use the console's address. The call is `POST /mcp` with one JSON-RPC message. `G
 | `artemis_load` | Restarts the app onto a path from `artemis_models`. Wait, then call `artemis_status`, before the next ask. A model that does not fit is refused |
 | `artemis_reference` | The tables kept in the app. `tool` is `convert`, `calendar`, `lookup`, `text`, or `note`. Nothing is downloaded and nothing is written under `/data` |
 
-One model stays on the GPU. Hand off does not restart from this call. The answer stays on the loaded model, and the text says so. A decision model cannot take `artemis_ask`. Those questions stay on `POST /v1/systemone` at port 47281.
+One model stays on the GPU. Hand off does not restart from this call. The answer stays on the loaded model, and the text says so. A decision model cannot take `artemis_ask`. Those questions stay on `POST /v1/systemone` at port 8081.
 
-`POST /v1/agent` on port 47282 is the same ask without the tool wrapper. The body can carry `prompt`, `system`, `messages`, `max_tokens`, and `plan`. The reply is an OpenAI chat completion plus an `artemis` object with the plan.
+`POST /v1/agent` on port 8082 is the same ask without the tool wrapper. The body can carry `prompt`, `system`, `messages`, `max_tokens`, and `plan`. The reply is an OpenAI chat completion plus an `artemis` object with the plan.
 
 A console that does not yet speak `/mcp` can still be reached by a small program LM Studio launches. `artemis_reference` through that program needs 0.12.0 or later on the console. The other four tools have been there since 0.10.0.
 

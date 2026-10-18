@@ -1198,7 +1198,7 @@
   function panelBase() {
     var host = location.hostname;
     if (!host) host = '127.0.0.1';
-    return location.protocol + '//' + host + ':47282';
+    return location.protocol + '//' + host + ':8082';
   }
   function panelSend(method, path, body, done) {
     var req = new XMLHttpRequest();
@@ -1249,7 +1249,7 @@
       var list = document.getElementById('lib-list');
       list.innerHTML = '';
       if (!data || !data.models) {
-        status.textContent = 'The library on port 47282 did not answer. Chat on this page still works.';
+        status.textContent = 'The library on port 8082 did not answer. Chat on this page still works.';
         return;
       }
       status.textContent = data.models.length ? data.models.length + ' models. Home folder ' + data.home + '.' : 'No models yet. Search below, or add a folder in Settings. Home folder ' + data.home + '.';
@@ -1537,7 +1537,7 @@
     panelSend('GET', '/settings', null, function (code, data, raw) {
       form.innerHTML = '';
       if (!data || typeof data.scan_ps5lm === 'undefined') {
-        status.textContent = 'Settings on port 47282 did not answer.';
+        status.textContent = 'Settings on port 8082 did not answer.';
         return;
       }
       takeSettings(data);

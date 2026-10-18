@@ -1,8 +1,8 @@
-// A small HTTP API on port 47282 for the phone and desktop page: the model
+// A small HTTP API on port 8082 for the phone and desktop page: the model
 // library, settings, Hugging Face search, downloads, the reference tables,
 // and LM Studio's agent.
-// Chat stays on 47281. MCP is POST /mcp on this port.
-// With no model loaded, page_start() serves that same page on 47281. It does
+// Chat stays on 8081. MCP is POST /mcp on this port.
+// With no model loaded, page_start() serves that same page on 8081. It does
 // not load a model and it does not start llama-server.
 // The thread is its own; the dashboard reads panel_generation() and reloads
 // settings when the page saves them.
@@ -21,7 +21,7 @@ void panel_start(Market * market, double budget_gib);
 // Close the library socket. A model change restarts the process, and the
 // next one cannot listen while this socket is still open.
 void panel_stop();
-// Serves the phone page on 47281 until a model load restarts the app.
+// Serves the phone page on 8081 until a model load restarts the app.
 // `note` is called with an empty string when a browser can open the page,
 // or with a short reason when it cannot. It may run on the page thread.
 void page_start(std::function<void(const std::string &)> note);

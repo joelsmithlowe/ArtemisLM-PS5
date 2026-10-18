@@ -1,6 +1,6 @@
 # Using the console from coding tools
 
-The app's llama-server speaks three APIs on port 47281, so most coding agents
+The app's llama-server speaks three APIs on port 8081, so most coding agents
 can use the model on the PS5 as their backend:
 
 | API | Path | Used by |
@@ -38,7 +38,7 @@ does not send more than the server holds.
     "ps5lm": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "ArtemisLM PS5",
-      "options": { "baseURL": "http://192.168.1.19:47281/v1" },
+      "options": { "baseURL": "http://192.168.1.19:8081/v1" },
       "models": { "ps5": { "name": "Model on the PS5", "limit": { "context": 65536, "output": 8192 } } }
     }
   }
@@ -56,7 +56,7 @@ minutes before anything reaches the console.
 ```toml
 [model_providers.ps5lm]
 name = "ArtemisLM PS5"
-base_url = "http://192.168.1.19:47281/v1"
+base_url = "http://192.168.1.19:8081/v1"
 wire_api = "responses"
 
 [profiles.ps5]
@@ -69,7 +69,7 @@ Then `codex -p ps5`.
 ## Claude Code
 
 ```sh
-ANTHROPIC_BASE_URL=http://192.168.1.19:47281 ANTHROPIC_AUTH_TOKEN=ps5lm \
+ANTHROPIC_BASE_URL=http://192.168.1.19:8081 ANTHROPIC_AUTH_TOKEN=ps5lm \
 ANTHROPIC_MODEL=ps5 ANTHROPIC_SMALL_FAST_MODEL=ps5 \
 CLAUDE_CODE_MAX_CONTEXT_TOKENS=65536 claude
 ```
@@ -83,29 +83,29 @@ folds them into the first one (`patches/0004`).
 ## aider
 
 ```sh
-aider --openai-api-base http://192.168.1.19:47281/v1 --openai-api-key ps5lm --model openai/ps5
+aider --openai-api-base http://192.168.1.19:8081/v1 --openai-api-key ps5lm --model openai/ps5
 ```
 
 ## Anything else
 
-Point an OpenAI-compatible client at `http://192.168.1.19:47281/v1` with any
+Point an OpenAI-compatible client at `http://192.168.1.19:8081/v1` with any
 API key and any model name.
 
-The library port is 47282. It stays up when a model is loaded.
+The library port is 8082. It stays up when a model is loaded.
 
 ```sh
-curl http://192.168.1.19:47282/v1/models
-curl http://192.168.1.19:47282/artemis
-curl http://192.168.1.19:47282/load -H 'Content-Type: application/json' \
+curl http://192.168.1.19:8082/v1/models
+curl http://192.168.1.19:8082/artemis
+curl http://192.168.1.19:8082/load -H 'Content-Type: application/json' \
   -d '{"path":"/data/ArtemisLM/models/model.gguf"}'
-curl http://192.168.1.19:47282/unload -H 'Content-Type: application/json' -d '{}'
+curl http://192.168.1.19:8082/unload -H 'Content-Type: application/json' -d '{}'
 ```
 
 `/v1/models` is an OpenAI model list. Each entry has `context_length` for the
 context this console would use, and an `artemislm` object with the file path,
 whether it fits, and whether it is the loaded one. `/load` and `/unload`
 restart the app. A model that does not fit is refused. With nothing loaded,
-port 47281 still serves the page, `GET /v1/models` is an empty list, and
+port 8081 still serves the page, `GET /v1/models` is an empty list, and
 `GET /health` answers 503 until a model is ready.
 
 ## LM Studio
@@ -133,7 +133,7 @@ The model in LM Studio then has five tools: `artemis_status`, `artemis_models`,
 `artemis_ask`, `artemis_load`, and `artemis_reference`. The reference tool converts
 units, does calendar dates, and looks up constants, elements, HTTP statuses, and
 short text encodings stored on the console. It needs 0.12.0 or later on the console.
-Ask sends the question to port 47281. When
+Ask sends the question to port 8081. When
 Agent mode on the console is Plan or Hand off, the script writes a short plan
 first and then the answer, both on the loaded model. Hand off does not restart
 from this script. Load restarts the app onto another file, so the next ask
@@ -144,7 +144,7 @@ The app also serves MCP on the library port once this source is installed:
 ```json
 {
   "mcpServers": {
-    "artemis-ps5": { "url": "http://192.168.1.19:47282/mcp" }
+    "artemis-ps5": { "url": "http://192.168.1.19:8082/mcp" }
   }
 }
 ```
@@ -155,7 +155,7 @@ The app also serves MCP on the library port once this source is installed:
 chat address and the MCP address.
 
 To use the PlayStation as the model instead of an agent, point an OpenAI
-client at `http://192.168.1.19:47281/v1`. LM Studio's own chat still runs its
+client at `http://192.168.1.19:8081/v1`. LM Studio's own chat still runs its
 local model and reaches the console through the tools above.
 
 ## Checked on the console

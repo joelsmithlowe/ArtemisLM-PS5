@@ -1172,6 +1172,14 @@ void check_page(std::function<void(const std::string &)> note, int gen) {
     std::string body;
     for (int i = 0; i < 3 && gen == g_page_gen.load(); ++i) {
         body = http_get(kPagePort, "/", 2);
+        if (!page_body(body)) {
+            // Loopback on this console can miss a socket bound to every address.
+            // The phone uses the LAN address, so the check has to as well.
+            const std::string ip = local_address();
+            if (!ip.empty()) {
+                body = http_get_host(ip.c_str(), kPagePort, "/", 2);
+            }
+        }
         if (page_body(body)) {
             if (gen == g_page_gen.load() && note) {
                 note("");
@@ -1235,9 +1243,12 @@ void serve_page(const std::function<void(const std::string &)> & note) {
         addr.sin_port = htons((uint16_t) kPagePort);
         addr.sin_addr.s_addr = htonl(INADDR_ANY);
         if (bind(srv, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(srv, 16) != 0) {
-            std::printf("artemislm-ps5: page port %d is not open, errno %d\n", kPagePort, errno);
+            const int err = errno;
+            std::printf("artemislm-ps5: page port %d is not open, errno %d\n", kPagePort, err);
             if (note) {
-                note("The page port is not open yet");
+                char text[80];
+                std::snprintf(text, sizeof(text), "Port %d did not open, errno %d", kPagePort, err);
+                note(text);
             }
             close(srv);
             sleep(1);

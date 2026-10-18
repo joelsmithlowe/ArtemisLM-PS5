@@ -59,7 +59,7 @@ struct ModelRow {
 
 struct Live {
     ServerState state = ServerState::loading;
-    std::string address;     // "192.168.1.19:47281"
+    std::string address;     // "192.168.1.19:8081"
 
     // The model that runs.
     std::string model_label;
@@ -174,6 +174,9 @@ std::string local_address();
 
 // A tiny HTTP GET over loopback; returns the body, or empty.
 std::string http_get(int port, const char * path, int timeout_s = 1);
+// The same GET to a numeric IPv4 address on this console. Loopback on the
+// PS5 does not always reach a socket bound to 0.0.0.0.
+std::string http_get_host(const char * ipv4, int port, const char * path, int timeout_s = 2);
 // The same with a JSON body, as a POST; reads the answer to its end.
 std::string http_post(int port, const char * path, const std::string & body, int timeout_s);
 

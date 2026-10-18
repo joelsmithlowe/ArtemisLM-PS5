@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // LM Studio launches this on the computer. It speaks MCP on stdin and calls
-// ArtemisLM on the PlayStation. Chat is the OpenAI API on port 47281. The
-// library is port 47282. One model stays on the GPU.
+// ArtemisLM on the PlayStation. Chat is the OpenAI API on port 8081. The
+// library is port 8082. One model stays on the GPU.
 //
 //   ARTEMIS_HOST=192.168.1.19 node scripts/lmstudio/artemis-mcp.mjs
 //
 // Works with a console on 0.10.0. A later build also serves MCP itself at
-// http://<PS5>:47282/mcp, which LM Studio can use without this script.
+// http://<PS5>:8082/mcp, which LM Studio can use without this script.
 // artemis_reference calls POST /reference, so that one tool needs 0.12.0 or later.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -14,8 +14,8 @@
 import http from 'node:http';
 
 const host = process.env.ARTEMIS_HOST || '';
-const chatPort = Number(process.env.ARTEMIS_CHAT_PORT || 47281);
-const libraryPort = Number(process.env.ARTEMIS_LIBRARY_PORT || 47282);
+const chatPort = Number(process.env.ARTEMIS_CHAT_PORT || 8081);
+const libraryPort = Number(process.env.ARTEMIS_LIBRARY_PORT || 8082);
 
 function hostOk(value) {
   return /^[A-Za-z0-9.-]{1,253}$/.test(value) && value.indexOf('..') < 0;

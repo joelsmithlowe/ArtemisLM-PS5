@@ -41,7 +41,7 @@ int main() {
     expect(!ps5lm::lan_ipv4("0.0.0.0"), "any");
     expect(!ps5lm::lan_ipv4("127.0.0.1"), "loopback");
     expect(!ps5lm::lan_ipv4("<console IP>"), "placeholder");
-    expect(!ps5lm::lan_ipv4("192.168.1.19:47281"), "port is not an address");
+    expect(!ps5lm::lan_ipv4("192.168.1.19:8081"), "port is not an address");
     expect(!ps5lm::lan_ipv4("256.1.1.1"), "octet");
     expect(!ps5lm::lan_ipv4("192.168.1"), "short");
 

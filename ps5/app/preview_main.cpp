@@ -59,7 +59,7 @@ std::string g_phase;       // the app still starting
 ps5lm::Live sample(float seconds, bool generating) {
     ps5lm::Live L;
     L.state       = generating ? ps5lm::ServerState::generating : ps5lm::ServerState::ready;
-    L.address     = "192.168.1.19:47281";
+    L.address     = "192.168.1.19:8081";
     L.model_label = "Qwen3.8-27B-UD-Q2_K_XL";
     L.model_arch  = "qwen35";
     L.preset      = "Qwen 3.8";
@@ -71,7 +71,7 @@ ps5lm::Live sample(float seconds, bool generating) {
     L.plan        = "64k context, q4_0 cache: 11.3 of 11.4 GiB";
     L.args = { "-m", L.model_file, "-ngl", "999", "-fit", "off", "-lm", "none", "-c", "65536", "-fa", "on",
                "-ctk", "q4_0", "-ctv", "q4_0", "-b", "256", "-ub", "64", "-np", "1", "-ctxcp", "1", "-cram", "0",
-               "--host", "0.0.0.0", "--port", "47281", "--temp", "0.6", "--top-p", "0.95", "--top-k", "20",
+               "--host", "0.0.0.0", "--port", "8081", "--temp", "0.6", "--top-p", "0.95", "--top-k", "20",
                "--min-p", "0", "--metrics" };
     L.soc_temp    = 61;
     L.cpu_temp    = 54;

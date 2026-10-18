@@ -3,7 +3,7 @@
 //
 // A title gets the console's direct memory (12 GiB) where a payload gets none,
 // and RADV turns it into Vulkan device memory, so the whole model sits on the
-// GPU. llama-server runs on its own thread on port 47281 (chat page and OpenAI
+// GPU. llama-server runs on its own thread on port 8081 (chat page and OpenAI
 // API) once a model is loaded. With nothing loaded, that port serves the page
 // on its own, so a model can be downloaded or a folder added. The main thread
 // draws the dashboard, reads the controller and plays the interface sounds.
@@ -11,7 +11,7 @@
 // planner (model_plan.cpp) picks each one's context and cache for the memory
 // free. The home folder is /data/ArtemisLM/models. PS5LM and PS5LM Plus are
 // read from /data/PS5LM/models when that switch is on. The phone page's
-// library listens on port 47282. /data/ArtemisLM/app-args.txt, one argument
+// library listens on port 8082. /data/ArtemisLM/app-args.txt, one argument
 // per line, overrides the planner.
 // The app logs to /data/ArtemisLM/app.log and llama.log.
 //
