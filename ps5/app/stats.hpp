@@ -105,10 +105,16 @@ struct Live {
     std::vector<Drive> drives;
     double scratch_gib = 0;  // the chat tools' scratch folder
 
-    // Memory, GiB.
+    // Memory, GiB. The direct pool is the title's RAM. VRAM is the Vulkan
+    // heap carved out of it. Host is the CPU device ggml reports beside that
+    // heap (about 2 GiB on this console), not a second copy of the pool.
     double pool_gib = 0;     // the title's direct memory
     double free_gib = 0;
     double heap_gib = 0;     // CPU heap, part of the pool
+    double vram_gib = 0;
+    double vram_free_gib = 0;
+    double host_gib = 0;
+    double host_free_gib = 0;
 
     // Loading: how much of the model and its cache is on the GPU, 0..1, or -1.
     float load_progress = -1;

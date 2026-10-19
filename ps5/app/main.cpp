@@ -447,7 +447,7 @@ void * run_server(void *) {
         rc = llama_server((int) argv.size() - 1, argv.data());
     } catch (const std::bad_alloc &) {
         g_server_oom = 1;
-        panel_set_fault("Out of memory. Set Memory fit to Spill to RAM, then load the model again.");
+        panel_set_fault("Out of memory. A smaller cache or a shorter context leaves room.");
         std::printf("artemislm-ps5: out of memory\n");
     } catch (const std::exception & e) {
         std::printf("artemislm-ps5: exception: %s\n", e.what());
@@ -1065,6 +1065,7 @@ int main(int, char **) {
         const size_t count = pad.read(samples);
         const hui::InputFrame input = tracker.update(std::span<const hui::PadSample>(samples, count), (uint64_t) now);
         Live live = stats.snapshot();
+        panel_set_console(live);
         if (g_server_rc >= 0 && live.state != ServerState::failed && live.state != ServerState::no_model) {
             stats.set_state(ServerState::failed);
             const bool projector = std::find(g_server_args.begin(), g_server_args.end(), "--mmproj") != g_server_args.end();
@@ -1076,8 +1077,8 @@ int main(int, char **) {
                               "Its image projector did not load, see /data/ArtemisLM/llama.log");
                 restart_at = n + 3;
             } else if (g_server_oom.load()) {
-                stats.set_phase("Out of memory. Spill to RAM in Settings, then load the model again.");
-                notify("ArtemisLM PS5: out of memory. Spill to RAM in Settings, then load the model again");
+                stats.set_phase("Out of memory. A smaller cache or a shorter context leaves room.");
+                notify("ArtemisLM PS5: out of memory. A smaller model or cache leaves room");
             } else {
                 notify("ArtemisLM PS5: the server stopped, see /data/ArtemisLM/llama.log");
             }

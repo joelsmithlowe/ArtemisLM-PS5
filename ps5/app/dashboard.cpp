@@ -119,7 +119,7 @@ constexpr SettingCategory kCategories[] = {
         { Setting::flash_attn, "Flash attention", "On uses this GPU's shaders and less memory. Off builds the full scores" },
         { Setting::batch, "Prompt batch", "Safe is the size measured here. Larger is faster and can stall the GPU" },
         { Setting::slots, "Chats at once", "Each chat keeps its own context. Two needs twice the cache" },
-        { Setting::memory, "Memory fit", "Measured is the spare tested here. Spill keeps a full GPU from stopping the app" } },
+        { Setting::memory, "Memory fit", "Measured keeps every layer on the GPU. Spill only if the rest fits beside it" } },
       6 },
     { "Sampling",
       { { Setting::sampling, "Reply style", "Model keeps the family's own settings. The others replace them" },
@@ -231,6 +231,17 @@ void split_name(const std::string & label, std::string * name, std::string * bui
     if (name->empty()) {
         *name = label;
     }
+}
+
+// Blue once a pool is busy, red once it is nearly full.
+Color pressure(float share) {
+    if (share >= 0.92f) {
+        return kRed;
+    }
+    if (share >= 0.75f) {
+        return kBlue;
+    }
+    return kInk.with_alpha(0.8f);
 }
 
 // A slim bar: the track, and the share filled.
@@ -737,7 +748,7 @@ std::vector<Choice> choices_of(const Settings & s, Setting id, const std::vector
                 [](Settings & v) { v.memory = "tight"; });
             add("More spare", "A shorter context, with more room left over", s.memory == "roomy",
                 [](Settings & v) { v.memory = "roomy"; });
-            add("Spill to RAM", "Layers that do not fit stay in memory. Slower, and the app stays up", s.memory == "spill",
+            add("Spill to RAM", "Layers that do not fit stay in memory, when that leftover fits beside the GPU", s.memory == "spill",
                 [](Settings & v) { v.memory = "spill"; });
             break;
         case Setting::agent:
@@ -1702,6 +1713,12 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
         if (live_.pool_gib > 0) {
             room = format("%.1f", live_.free_gib) + " GB free in memory";
         }
+        if (live_.vram_gib > 0) {
+            if (!room.empty()) {
+                room += "    ";
+            }
+            room += format("%.1f", live_.vram_free_gib) + " GB free in VRAM";
+        }
         if (!live_.drives.empty() && live_.drives[0].total > 0) {
             if (!room.empty()) {
                 room += "    ";
@@ -1820,17 +1837,29 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
             trace(l, live_.gen_history, { kLeft, 702, 860, 100 }, kInk.with_alpha(0.75f));
         }
 
-        // Two quiet meters: what the model holds, and how much of its context is used.
-        const double used = live_.pool_gib - live_.free_gib;
-        const float my = 868;
-        put(l, f.regular, "Memory", kLeft, my, 22, kInk2);
-        put(l, f.regular, format("%.1f", used) + " of " + gb(live_.pool_gib), kLeft + 400, my, 22, kInk,
-             gfx::Align::right);
-        meter(l, kLeft, my + 16, 400, live_.pool_gib > 0 ? (float) (used / live_.pool_gib) : 0, kInk.with_alpha(0.8f));
-        put(l, f.regular, "Context", kLeft + 460, my, 22, kInk2);
-        put(l, f.regular, thousands(live_.ctx_used) + " of " + format("%.0fk", live_.ctx / 1024.0), kLeft + 860, my, 22, kInk,
-             gfx::Align::right);
-        meter(l, kLeft + 460, my + 16, 400, live_.ctx > 0 ? (float) live_.ctx_used / (float) live_.ctx : 0, kInk.with_alpha(0.8f));
+        // Memory, VRAM, and context. VRAM is the GPU heap inside the direct pool.
+        {
+        const double ram_used = std::max(0.0, live_.pool_gib - live_.free_gib);
+        const double vram_used = live_.vram_gib > 0 ? std::max(0.0, live_.vram_gib - live_.vram_free_gib) : 0;
+        const float my = 852;
+        const float mw = 270, mgap = 25;
+        const float ram_share = live_.pool_gib > 0 ? (float) (ram_used / live_.pool_gib) : 0;
+        const float vram_share = live_.vram_gib > 0 ? (float) (vram_used / live_.vram_gib) : 0;
+        const float ctx_share = live_.ctx > 0 ? (float) live_.ctx_used / (float) live_.ctx : 0;
+        const char * names[] = { "Memory", "VRAM", "Context" };
+        const std::string values[] = {
+            live_.pool_gib > 0 ? format("%.1f", ram_used) + " of " + gb(live_.pool_gib) : std::string(kDash),
+            live_.vram_gib > 0 ? format("%.1f", vram_used) + " of " + gb(live_.vram_gib) : std::string(kDash),
+            thousands(live_.ctx_used) + " of " + format("%.0fk", live_.ctx / 1024.0),
+        };
+        const float shares[] = { ram_share, vram_share, ctx_share };
+        for (int i = 0; i < 3; ++i) {
+            const float x = kLeft + (mw + mgap) * (float) i;
+            put(l, f.regular, names[i], x, my, 20, kInk2);
+            put(l, f.regular, values[i], x + mw, my, 20, kInk, gfx::Align::right);
+            meter(l, x, my + 14, mw, shares[i], i == 2 ? kInk.with_alpha(0.8f) : pressure(shares[i]));
+        }
+        }
 
         // GPU, CPU, the last prompt, and either the agent or the first GPU
         // choice that left the measured path.
@@ -1963,6 +1992,37 @@ void Dashboard::draw_home(gfx::DrawList & l) const {
 void Dashboard::draw_models(gfx::DrawList & l) const {
     const ui::Fonts & f = fonts_;
     put(l, f.semibold, "Models", kLeft, kTitleY, 44, kInk);
+    if (section_ == kLocal && !live_.models.empty()) {
+        int fit = 0;
+        int big = 0;
+        int unread = 0;
+        for (const auto & row : live_.models) {
+            if (row.fits) {
+                ++fit;
+            } else if (row.plan.find("GiB") != std::string::npos) {
+                ++big;
+            } else {
+                ++unread;
+            }
+        }
+        std::string tally;
+        if (fit) {
+            tally += std::to_string(fit) + (fit == 1 ? " fits" : " fit");
+        }
+        if (big) {
+            if (!tally.empty()) {
+                tally += "    ";
+            }
+            tally += std::to_string(big) + " too big";
+        }
+        if (unread) {
+            if (!tally.empty()) {
+                tally += "    ";
+            }
+            tally += std::to_string(unread) + " unreadable";
+        }
+        put(l, f.regular, tally, kRight, kTitleY - 6, 22, kInk2, gfx::Align::right);
+    }
 
     // The highlight: on a section, or on a row of the list.
     const float hx = in_list_ ? kListX : kLeft - 20;
@@ -2030,8 +2090,10 @@ void Dashboard::draw_local(gfx::DrawList & l, const Rect & a) const {
         }
         meta += "    " + plan;
         put(l, f.regular, f.regular.font->fit(meta, 20, a.w - 260), a.x + 28, y + 66, 20, kInk3);
-        const char * state = m.current ? "Running" : m.fits ? "" : "Too big";
-        put(l, f.semibold, state, a.x + a.w - 28, y + 50, 22, m.current ? kBlue : kInk3, gfx::Align::right);
+        const bool measured = m.plan.find("GiB") != std::string::npos;
+        const char * state = m.current ? "Running" : m.fits ? "Fits" : measured ? "Too big" : "Unreadable";
+        const Color state_c = m.current ? kGreen : m.fits ? kInk2 : kRed;
+        put(l, f.semibold, state, a.x + a.w - 28, y + 50, 22, state_c, gfx::Align::right);
     }
 }
 
@@ -2056,7 +2118,7 @@ void Dashboard::draw_suggested(gfx::DrawList & l, const Rect & a) const {
         for (const auto & m : live_.models) {
             if (m.label + ".gguf" == local_name(s.model)) {
                 state = m.current ? "Running" : "On this PS5";
-                c = m.current ? kBlue : kInk3;
+                c = m.current ? kGreen : kInk3;
             }
         }
         for (const auto & d : market_.downloads) {
@@ -2118,8 +2180,9 @@ void Dashboard::draw_market(gfx::DrawList & l, const Rect & a) const {
         const std::string plan = m.checking ? "Reading its header" : m.fits == -1 ? "Square checks whether it fits" : m.plan;
         put(l, f.regular, f.regular.font->fit(format("%.1f GB", m.bytes / 1073741824.0) + "    " + gb_text(plan), 20, a.w - 300), a.x + 28, y + 66,
              20, kInk3);
-        put(l, f.semibold, m.fits == 1 ? "Fits" : m.fits == 0 ? "Too big" : "", a.x + a.w - 28, y + 50, 22,
-             m.fits == 1 ? kInk2 : kInk3, gfx::Align::right);
+        const char * mark = m.fits == 1 ? "Fits" : m.fits == 0 ? "Too big" : m.fits == -2 ? "Unknown" : "";
+        const Color mark_c = m.fits == 0 ? kRed : m.fits == 1 ? kInk2 : kInk3;
+        put(l, f.semibold, mark, a.x + a.w - 28, y + 50, 22, mark_c, gfx::Align::right);
     }
 }
 
@@ -2347,7 +2410,9 @@ void Dashboard::draw_console(gfx::DrawList & l) const {
         { "", "" },
         { "GPU busy", format("%.0f%%", 100.0 * live_.gpu_busy) },
         { "CPU use", format("%.0f%%", 100.0 * live_.cpu_use) },
-        { "Memory", format("%.1f", live_.pool_gib - live_.free_gib) + " of " + gb(live_.pool_gib) },
+        { "Memory", live_.pool_gib > 0 ? format("%.1f", live_.pool_gib - live_.free_gib) + " of " + gb(live_.pool_gib) : std::string(kDash) },
+        { "VRAM", live_.vram_gib > 0 ? format("%.1f", live_.vram_gib - live_.vram_free_gib) + " of " + gb(live_.vram_gib) : std::string(kDash) },
+        { "CPU memory", live_.host_gib > 0 ? format("%.1f", live_.host_gib - live_.host_free_gib) + " of " + gb(live_.host_gib) : std::string(kDash) },
         { "", "" },
     };
     for (const auto & d : live_.drives) {
@@ -2371,11 +2436,16 @@ void Dashboard::draw_console(gfx::DrawList & l) const {
             share = live_.cpu_use;
         } else if (name == "Memory" && live_.pool_gib > 0) {
             share = (float) ((live_.pool_gib - live_.free_gib) / live_.pool_gib);
+        } else if (name == "VRAM" && live_.vram_gib > 0) {
+            share = (float) ((live_.vram_gib - live_.vram_free_gib) / live_.vram_gib);
+        } else if (name == "CPU memory" && live_.host_gib > 0) {
+            share = (float) ((live_.host_gib - live_.host_free_gib) / live_.host_gib);
         }
         if (share >= 0) {
-            gauge(l, p.x + 196, y - 6, share, kInk);
+            const bool pool = name == "Memory" || name == "VRAM" || name == "CPU memory";
+            gauge(l, p.x + 196, y - 6, share, pool ? pressure(share) : kInk);
         }
-        y += 38;
+        y += 34;
     }
 }
 

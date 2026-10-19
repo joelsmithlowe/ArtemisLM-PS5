@@ -164,7 +164,11 @@ wait
 rm -f "$obj/libps5lm_kit.a"
 "$sdk/bin/llvm-ar" rcs "$obj/libps5lm_kit.a" "${kit_objects[@]}"
 for src in display dashboard stats; do
-    cxx -fexceptions -fcxx-exceptions "${kitflags[@]}" -c "$root/ps5/app/$src.cpp" -o "$obj/$src.o"
+    ggml=()
+    if [ "$src" = stats ]; then
+        ggml+=(-I "$llama/ggml/include")
+    fi
+    cxx -fexceptions -fcxx-exceptions "${kitflags[@]}" "${ggml[@]}" -c "$root/ps5/app/$src.cpp" -o "$obj/$src.o"
 done
 
 # AGC comes from system modules; these stubs only name the imports, every

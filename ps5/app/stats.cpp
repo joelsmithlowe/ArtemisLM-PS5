@@ -22,6 +22,7 @@
 #ifdef __PROSPERO__
 #include <ps5platform/heap.h>
 #include <ps5platform/kernel.h>
+#include "ggml-backend.h"
 extern "C" int scePthreadGetaffinity(void * thread, uint64_t * mask);
 extern "C" void * scePthreadSelf(void);
 // libkernel; signatures as Marice/ps5-exporter and the SDK's hwinfo sample use them.
@@ -406,7 +407,7 @@ void StatsCollector::run() {
             slots = http_get(port_, "/slots");
         }
 
-        double pool = 0, free = 0, heap = 0;
+        double pool = 0, free = 0, heap = 0, vram = 0, vram_free = 0, host = 0, host_free = 0;
 #ifdef __PROSPERO__
         const int64_t pool_bytes = sceKernelGetDirectMemorySize();
         int64_t       at = 0;
@@ -417,6 +418,19 @@ void StatsCollector::run() {
         pool = pool_bytes / kGiB;
         free = avail / kGiB;
         heap = hs.mapped_bytes / kGiB;
+        for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+            ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+            size_t df = 0, dtot = 0;
+            ggml_backend_dev_memory(dev, &df, &dtot);
+            const auto kind = ggml_backend_dev_type(dev);
+            if (kind == GGML_BACKEND_DEVICE_TYPE_GPU || kind == GGML_BACKEND_DEVICE_TYPE_IGPU) {
+                vram_free = df / kGiB;
+                vram = dtot / kGiB;
+            } else if (kind == GGML_BACKEND_DEVICE_TYPE_CPU) {
+                host_free = df / kGiB;
+                host = dtot / kGiB;
+            }
+        }
 #endif
 
         float soc_t = -1000, cpu_t = -1000, watts = 0, ghz = 0;
@@ -516,6 +530,17 @@ void StatsCollector::run() {
         live_.pool_gib = pool;
         live_.free_gib = free;
         live_.heap_gib = heap;
+        live_.vram_gib = vram;
+        live_.vram_free_gib = vram_free;
+        live_.host_gib = host;
+        live_.host_free_gib = host_free;
+        if (live_.state == ServerState::loading && free > 0 && free < 0.40) {
+            static int warned = 0;
+            if (!warned) {
+                warned = 1;
+                std::printf("artemislm-ps5: direct memory nearly full during load (%.2f GiB free)\n", free);
+            }
+        }
         live_.cpu_use  = (float) std::min(1.0, (cpu - last_cpu) / (dt * live_.cpus));
         if (live_.state == ServerState::loading && load_base_ >= 0 && live_.model_gib + live_.kv_gib > 0) {
             const double added = (pool - free) - load_base_;

@@ -34,8 +34,8 @@
     font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   #sky { position: fixed; left: 0; top: 0; z-index: 0; pointer-events: none; }
   body.away #sky { opacity: 0; visibility: hidden; }
-  .top, .nav, .scroll, .page, .composer { position: relative; z-index: 1; }
-  body { display: flex; flex-direction: column; min-height: 100%; }
+  .top, .usage, .nav, .scroll, .page, .composer { position: relative; z-index: 1; }
+  body { display: flex; flex-direction: column; min-height: 100%; height: 100%; height: 100dvh; }
   button, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
   button:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -48,10 +48,16 @@
   .brand span { color: var(--accent); font-weight: 650; }
   .model { color: var(--muted); font-size: 0.875rem; margin-left: auto;
     max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .nav { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 1rem 0.75rem; background: #0e0e14; }
-  .tab { min-height: 36px; border: 1px solid var(--border); background: transparent;
-    color: var(--muted); border-radius: 999px; padding: 0.3rem 0.85rem; }
-  .tab.on { background: var(--raised); color: var(--text); border-color: var(--raised); }
+  .usage { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.55rem 1rem 0.15rem; background: #0e0e14; }
+  .meter { display: inline-flex; align-items: center; min-height: 32px; padding: 0.15rem 0.7rem;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+    color: var(--body); font-size: 0.78rem; letter-spacing: 0.01em; }
+  .meter.warm { color: var(--text); border-color: #3d3a62; }
+  .meter.hot { color: #ffd0cc; border-color: #6a3034; background: #2a1618; }
+  .nav { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0.55rem 1rem 0.7rem; background: #0e0e14; }
+  .tab { min-height: 40px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); border-radius: 12px; padding: 0.35rem 0.95rem; font-weight: 650; }
+  .tab.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .page { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #0e0e14; }
   .page.off, .scroll.off { display: none; }
   .page .column { background: #0e0e14; }
@@ -60,14 +66,26 @@
   .card { background: #1c1c26; border: 1px solid var(--border); border-radius: 12px;
     padding: 0.85rem 1rem; margin: 0 0 0.6rem; }
   .card h2 { margin: 0 0 0.2rem; color: var(--text); font-size: 1rem; font-weight: 650; }
+  .cardhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.65rem; }
+  .cardhead h2 { margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { flex: none; margin-top: 0.05rem; border-radius: 999px; border: 1px solid var(--border);
+    padding: 0.2rem 0.65rem; font-size: 0.75rem; font-weight: 650; letter-spacing: 0.01em;
+    color: var(--muted); background: var(--surface); white-space: nowrap; }
+  .badge.run { color: #b7f0d0; border-color: #245c40; background: #13261c; }
+  .badge.ok { color: var(--body); border-color: #3a3a46; }
+  .badge.bad { color: #ffd0cc; border-color: #6a3034; background: #2a1618; }
+  .badge.wait { color: var(--faint); }
   .card p { margin: 0.15rem 0; color: var(--muted); font-size: 0.875rem; line-height: 1.4; }
-  .rowbtns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
-  .rowbtns button, .field button, .searchbar button { min-height: 44px; border-radius: 10px;
-    border: 1px solid var(--border); background: var(--raised); color: var(--text); padding: 0 0.8rem; }
-  .rowbtns button.primary, .searchbar button { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 650; }
-  .searchbar, .field { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.8rem; }
-  .searchbar input, .searchbar select, .field input, .field select { flex: 1 1 8rem; min-width: 0; min-height: 44px; font-size: 16px;
-    color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.4rem 0.7rem; }
+  .rowbtns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; align-items: center; }
+  .rowbtns button, .field button, .searchbar button { min-height: 48px; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--raised); color: var(--text); padding: 0 1rem;
+    font-weight: 650; }
+  .rowbtns button.primary, .searchbar button, .field button.primary { background: var(--accent); color: var(--accent-ink); border: 0; }
+  .searchbar, .field { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.85rem; align-items: center; }
+  .searchbar .status { flex: 1 1 14rem; margin: 0; }
+  .searchbar input, .searchbar select, .field input, .field select { flex: 1 1 12rem; min-width: 0; min-height: 48px; font-size: 16px;
+    color: var(--text); background: #12121a; border: 1px solid var(--border); border-radius: 12px; padding: 0.45rem 0.8rem; }
+  .searchbar button, .field button { flex: none; }
   .check { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; color: var(--body); }
   .note { color: var(--muted); font-size: 0.875rem; line-height: 1.45; margin: 0 0 0.8rem; }
   .field.changed select, .field.changed input { border-color: var(--accent); }
@@ -75,8 +93,9 @@
   .status { color: var(--faint); font-size: 0.875rem; margin: 0 0 0.6rem; }
   body.away .composer { display: none; }
 
-  .scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .column { max-width: 42rem; margin: 0 auto; padding: 1.25rem 1rem 2rem; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    background: linear-gradient(180deg, rgba(14, 14, 20, 0.2), rgba(14, 14, 20, 0.55)); }
+  .column { max-width: 46rem; margin: 0 auto; padding: 1.1rem 1rem 1.5rem; width: 100%; box-sizing: border-box; }
 
   .empty { padding: 8vh 0 1rem; }
   .empty h1 { color: var(--text); font-size: 1.75rem; font-weight: 600; margin: 0 0 0.4rem;
@@ -89,12 +108,15 @@
     min-height: 44px; }
   .idea:hover { background: var(--raised); color: var(--text); }
 
-  .msg { margin: 0 0 1.15rem; }
+  .msg { margin: 0 0 0.9rem; }
   .me { display: flex; justify-content: flex-end; }
-  .me div { background: var(--raised); color: var(--text); border-radius: 16px 16px 4px 16px;
-    padding: 0.7rem 0.95rem; max-width: 85%; line-height: 1.45;
+  .me div { background: #2a2744; color: var(--text); border: 1px solid #3c3860;
+    border-radius: 18px 18px 6px 18px;
+    padding: 0.75rem 1rem; max-width: 85%; line-height: 1.5;
     overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap; }
-  .bot { color: var(--body); line-height: 1.5; }
+  .bot { color: var(--body); line-height: 1.55; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 18px 18px 18px 6px;
+    padding: 0.85rem 1rem; }
   .answer { overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap; }
   .meta { display: block; color: var(--faint); font-size: 0.8125rem; margin-top: 0.45rem; }
   .err { color: var(--err); }
@@ -119,22 +141,24 @@
   .tool.bad .tool-name { color: var(--err); }
   .tool.bad .tool-body { color: var(--err); }
 
-  .composer { flex: none; background: linear-gradient(to top, rgba(12, 12, 18, 0.96), rgba(12, 12, 18, 0));
-    padding: 0.35rem 1rem 0.85rem; }
-  .dock { max-width: 42rem; margin: 0 auto; background: var(--surface);
-    border: 1px solid var(--border); border-radius: 22px; padding: 0.35rem 0.45rem 0.4rem;
-    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35); }
+  .composer { flex: none; background: #0e0e14;
+    border-top: 1px solid var(--border); padding: 0.65rem 1rem 0.85rem; }
+  .dock { max-width: 46rem; margin: 0 auto; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 20px; padding: 0.55rem 0.55rem 0.5rem;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35); }
   .composer form { display: block; margin: 0; }
-  textarea { display: block; width: 100%; box-sizing: border-box; min-width: 0; min-height: 44px; max-height: 8rem; resize: none;
-    font-size: 16px; line-height: 1.4; color: var(--text); background: transparent;
-    border: 0; border-radius: 12px; padding: 0.55rem 0.6rem 0.25rem; }
+  textarea { display: block; width: 100%; box-sizing: border-box; min-width: 0; min-height: 52px; max-height: 9rem; resize: none;
+    font-size: 16px; line-height: 1.45; color: var(--text); background: #12121a;
+    border: 1px solid var(--border); border-radius: 14px; padding: 0.7rem 0.8rem; }
   textarea::placeholder { color: var(--faint); }
-  .dock-row { display: flex; align-items: center; gap: 0.15rem; }
-  .ghost { min-height: 36px; border-radius: 999px; border: 0; background: transparent;
-    color: var(--muted); padding: 0 0.7rem; }
-  .ghost:hover { background: var(--raised); color: var(--text); }
-  .send { margin-left: auto; flex: none; min-width: 4.6rem; min-height: 36px; border: 0; border-radius: 999px;
-    background: var(--accent); color: var(--accent-ink); font-weight: 650; padding: 0 0.95rem; }
+  .dock-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding-top: 0.45rem; }
+  .sr-file { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0px, 0px, 0px, 0px); border: 0; }
+  .ghost { min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--raised);
+    color: var(--text); padding: 0 0.85rem; font-weight: 650; }
+  .ghost:hover { background: #2a2a36; }
+  .send { margin-left: auto; flex: none; min-width: 5.2rem; min-height: 44px; border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--accent-ink); font-weight: 650; padding: 0 1.1rem; }
   .send.stop { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
   .menu { position: relative; }
   .menu-panel { display: none; position: absolute; left: 0; bottom: calc(100% + 0.45rem); z-index: 6;
@@ -190,7 +214,8 @@
   @media (min-width: 800px) {
     html { font-size: 17px; }
     .top { padding-left: 1.5rem; padding-right: 1.5rem; }
-    .column { padding: 2rem 1.5rem 2.5rem; }
+    .column { padding: 1.5rem 1.5rem 1.75rem; }
+    .usage { padding-left: 1.5rem; padding-right: 1.5rem; }
     .empty h1 { font-size: 2rem; }
   }
 </style>
@@ -213,6 +238,14 @@
   <button class="tab" id="tab-projects" type="button">Projects</button>
   <button class="tab" id="tab-settings" type="button">Settings</button>
 </nav>
+<div class="usage" id="usage">
+  <span class="meter" id="use-ram">Memory</span>
+  <span class="meter" id="use-vram">VRAM</span>
+  <span class="meter" id="use-host">CPU mem</span>
+  <span class="meter" id="use-gpu">GPU</span>
+  <span class="meter" id="use-cpu">CPU</span>
+  <span class="meter" id="use-temp">Temp</span>
+</div>
 
 <div class="scroll" id="scroll">
   <div class="column" id="log">
@@ -231,8 +264,11 @@
 
 <div class="page off" id="view-library">
   <div class="column">
-    <p class="note">Models already on the console, then a Hugging Face search. Load restarts the console onto that model. A move of the loaded model unloads it, copies the file, checks the copy, then loads it from ArtemisLM. Downloads go to the folder chosen in Settings.</p>
-    <div class="status" id="lib-status">Loading the library…</div>
+    <p class="note">Models already on the console, then a Hugging Face search. Scan reads each file against free memory and says whether it will load. Load restarts the console onto that model. A move of the loaded model unloads it, copies the file, checks the copy, then loads it from ArtemisLM. Downloads go to the folder chosen in Settings.</p>
+    <div class="searchbar">
+      <div class="status" id="lib-status">Not scanned yet.</div>
+      <button id="lib-scan" type="button">Scan</button>
+    </div>
     <div id="lib-list"></div>
     <div id="dl-list"></div>
     <h2 style="color:#f4f1ea;font-size:1.15rem;margin:1.2rem 0 0.6rem;">Search Hugging Face</h2>
@@ -261,7 +297,7 @@
 
 <div class="page off" id="view-settings">
   <div class="column">
-    <p class="note">Measured keeps every layer on the GPU, with the spare this console was tested with. Spill to RAM leaves layers that do not fit in memory, so a model at the limit stays up instead of stopping the app. Tight keeps less spare and a load can fail.</p>
+    <p class="note">Measured keeps every layer on the GPU. A plan that would fill the console uses a smaller cache instead of copying layers into the same memory. Spill to RAM only helps when the leftover fits beside the GPU. Tight keeps less spare and a load can fail.</p>
     <div class="status" id="set-status">Loading settings…</div>
     <div id="set-form"></div>
   </div>
@@ -283,7 +319,7 @@
         <button class="send" id="send" type="submit">Send</button>
       </div>
     </form>
-    <input id="attach-file" type="file" accept="image/*,.txt,.md,.json,.js,.mjs,.html,.css,.py,.svg,.csv" multiple style="position:absolute;left:-9999px;width:1px;height:1px;">
+    <input id="attach-file" class="sr-file" type="file" accept="image/*,.txt,.md,.json,.js,.mjs,.html,.css,.py,.svg,.csv" multiple>
   </div>
 </div>
 
@@ -855,8 +891,14 @@
       }
       if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
       if (!body) {
-        if (req.status === 0) consoleFault('The console did not answer.', function (text) { fail(holder, text); });
-        else fail(holder, 'No answer. Check that a model is loaded on the console.');
+        if (req.status === 0) {
+          var faultTurn = turn;
+          consoleFault('The console did not answer.', function (text) {
+            if (turn !== faultTurn) return;
+            fail(holder, text);
+          });
+        } else fail(holder, 'No answer. Check that a model is loaded on the console.');
+        return;
       }
       else {
         fillAnswer(answer, body);
@@ -879,6 +921,8 @@
     if (body) history.push({ role: 'assistant', content: body });
     turn = null;
     busy(false);
+    bottom();
+    if (input && input.focus) input.focus();
   }
   function fail(holder, message) {
     if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
@@ -889,6 +933,7 @@
     turn = null;
     busy(false);
     bottom();
+    if (input && input.focus) input.focus();
   }
   function fillAnswer(node, body) {
     var fence = String.fromCharCode(96, 96, 96);
@@ -1361,11 +1406,16 @@
           return;
         }
         var ready = 0;
-        for (var i = 0; i < data.models.length; i++) if (data.models[i].fits && !data.models[i].current) ready++;
-        status.textContent = ready ? 'Load restarts the console. It takes about half a minute.' : 'Nothing is ready to load. Open the library to download a model.';
+        var blocked = 0;
+        for (var i = 0; i < data.models.length; i++) {
+          var kind = scanKind(data.models[i]);
+          if (kind === 'fit') ready += 1;
+          else if (kind === 'big' || kind === 'unread') blocked += 1;
+        }
+        status.textContent = (ready ? 'Load restarts the console. It takes about half a minute.' : 'Nothing is ready to load. Open the library to download a model.') + (blocked ? ' ' + blocked + ' will not load.' : '');
         for (var j = 0; j < data.models.length; j++) {
           (function (m) {
-            if (!m.fits || m.current) return;
+            if (scanKind(m) !== 'fit') return;
             var b = document.createElement('button');
             b.className = 'idea';
             b.type = 'button';
@@ -1483,8 +1533,13 @@
     }
     if (xhr || turn) {
       if (turn) turn.cancelled = true;
-      if (xhr) xhr.abort();
-      xhr = null;
+      if (xhr) {
+        xhr.abort();
+        xhr = null;
+        return;
+      }
+      turn = null;
+      busy(false);
       return;
     }
     var text = trim(input.value);
@@ -1531,9 +1586,61 @@
   panelSend('GET', '/settings', null, function (code, data) {
     takeSettings(data);
   });
-  panelSend('GET', '/artemis', null, function (code, data) {
-    if (data && typeof data.loaded === 'string') loadedPath = data.loaded;
-  });
+  function oneGb(n) {
+    var v = Number(n);
+    if (!(v >= 0)) return '';
+    return (Math.round(v * 10) / 10) + '';
+  }
+  function pairGb(used, total) {
+    if (!(Number(total) > 0)) return '—';
+    return oneGb(used) + ' / ' + oneGb(total) + ' GB';
+  }
+  function paintUsage(data) {
+    var c = data && data.console ? data.console : null;
+    var ram = document.getElementById('use-ram');
+    var vram = document.getElementById('use-vram');
+    var host = document.getElementById('use-host');
+    var gpu = document.getElementById('use-gpu');
+    var cpu = document.getElementById('use-cpu');
+    var temp = document.getElementById('use-temp');
+    function mark(el, share) {
+      var hot = share >= 0.92 ? ' hot' : (share >= 0.75 ? ' warm' : '');
+      el.className = 'meter' + hot;
+    }
+    if (!c) {
+      ram.textContent = 'Memory —';
+      vram.textContent = 'VRAM —';
+      host.textContent = 'CPU mem —';
+      gpu.textContent = 'GPU —';
+      cpu.textContent = 'CPU —';
+      temp.textContent = 'Temp —';
+      return;
+    }
+    var ramUsed = (Number(c.pool_gib) || 0) - (Number(c.free_gib) || 0);
+    var vramUsed = (Number(c.vram_gib) || 0) - (Number(c.vram_free_gib) || 0);
+    var hostUsed = (Number(c.host_gib) || 0) - (Number(c.host_free_gib) || 0);
+    ram.textContent = 'Memory ' + pairGb(ramUsed, c.pool_gib);
+    vram.textContent = 'VRAM ' + pairGb(vramUsed, c.vram_gib);
+    host.textContent = 'CPU mem ' + pairGb(hostUsed, c.host_gib);
+    gpu.textContent = 'GPU ' + (Number(c.gpu) >= 0 ? Math.round(Number(c.gpu) * 100) + '%' : '—');
+    cpu.textContent = 'CPU ' + (Number(c.cpu) >= 0 ? Math.round(Number(c.cpu) * 100) + '%' : '—');
+    var t = Number(c.soc_temp);
+    temp.textContent = t > -100 ? ('Temp ' + Math.round(t) + '\u00B0C') : 'Temp —';
+    if (Number(c.power_w) > 0) temp.textContent += '  ' + Math.round(Number(c.power_w)) + ' W';
+    mark(ram, Number(c.pool_gib) > 0 ? ramUsed / Number(c.pool_gib) : 0);
+    mark(vram, Number(c.vram_gib) > 0 ? vramUsed / Number(c.vram_gib) : 0);
+    mark(host, Number(c.host_gib) > 0 ? hostUsed / Number(c.host_gib) : 0);
+    mark(gpu, Number(c.gpu) || 0);
+    mark(cpu, Number(c.cpu) || 0);
+  }
+  function pollUsage() {
+    panelSend('GET', '/artemis', null, function (code, data) {
+      if (data && typeof data.loaded === 'string') loadedPath = data.loaded;
+      paintUsage(data);
+    });
+  }
+  pollUsage();
+  setInterval(pollUsage, 2000);
   function offered(tools, name) {
     for (var i = 0; i < tools.length; i++) {
       var fn = tools[i] && tools[i].function;
@@ -1545,6 +1652,47 @@
     var v = Number(n);
     if (!v) return '';
     return (Math.round(v * 10) / 10) + ' GB';
+  }
+  var libraryScan = 0;
+  function scanKind(m) {
+    if (m && m.current) return 'run';
+    if (m && m.fits) return 'fit';
+    var plan = m && m.plan ? m.plan : '';
+    if (!plan || plan === 'Waiting for the GPU') return 'wait';
+    if (plan.indexOf('GiB') < 0) return 'unread';
+    return 'big';
+  }
+  function scanWord(kind) {
+    if (kind === 'run') return 'Running';
+    if (kind === 'fit') return 'Fits';
+    if (kind === 'wait') return 'Not scanned';
+    if (kind === 'unread') return 'Unreadable';
+    return 'Will not load';
+  }
+  function scanClass(kind) {
+    if (kind === 'run') return 'badge run';
+    if (kind === 'fit') return 'badge ok';
+    if (kind === 'big' || kind === 'unread') return 'badge bad';
+    return 'badge wait';
+  }
+  function scanLine(models, home) {
+    var fit = 0;
+    var big = 0;
+    var unread = 0;
+    var wait = 0;
+    var i;
+    for (i = 0; i < models.length; i++) {
+      var kind = scanKind(models[i]);
+      if (kind === 'run' || kind === 'fit') fit += 1;
+      else if (kind === 'big') big += 1;
+      else if (kind === 'unread') unread += 1;
+      else wait += 1;
+    }
+    var line = 'Scanned ' + models.length + ' model' + (models.length === 1 ? '' : 's') + '. ' + fit + ' will load. ' + big + ' will not.';
+    if (unread) line += ' ' + unread + ' could not be read.';
+    if (wait) line += ' ' + wait + ' waiting for a memory reading.';
+    if (home) line += ' Home folder ' + home + '.';
+    return line;
   }
   function showTab(name) {
     document.getElementById('scroll').className = name === 'chat' ? 'scroll' : 'scroll off';
@@ -1564,22 +1712,34 @@
     if (name === 'settings') loadSettings();
   }
   function loadLibrary() {
+    libraryScan += 1;
+    var scan = libraryScan;
     var status = document.getElementById('lib-status');
-    status.textContent = 'Loading the library…';
+    if (status) status.textContent = 'Scanning each model against free memory\u2026';
     panelSend('GET', '/library', null, function (code, data) {
+      if (scan !== libraryScan) return;
       var list = document.getElementById('lib-list');
+      if (!status || !list) return;
       list.innerHTML = '';
       if (!data || !data.models) {
         status.textContent = 'The library on port 8082 did not answer. Chat on this page still works.';
         return;
       }
-      status.textContent = data.models.length ? data.models.length + ' models. Home folder ' + data.home + '.' : 'No models yet. Search below, or add a folder in Settings. Home folder ' + data.home + '.';
+      status.textContent = data.models.length ? scanLine(data.models, data.home) : 'No models yet. Search below, or add a folder in Settings.' + (data.home ? ' Home folder ' + data.home + '.' : '');
       for (var i = 0; i < data.models.length; i++) {
         (function (m) {
+          var kind = scanKind(m);
           var card = document.createElement('div');
           card.className = 'card';
+          var head = document.createElement('div');
+          head.className = 'cardhead';
           var title = document.createElement('h2');
           title.textContent = m.label || m.file;
+          var badge = document.createElement('span');
+          badge.className = scanClass(kind);
+          badge.textContent = scanWord(kind);
+          head.appendChild(title);
+          head.appendChild(badge);
           var meta = document.createElement('p');
           var bits = [m.kind || 'Language'];
           if (m.vision) bits.push('images');
@@ -1594,7 +1754,7 @@
           meta.textContent = bits.join(' · ');
           var plan = document.createElement('p');
           plan.textContent = m.plan || '';
-          card.appendChild(title);
+          card.appendChild(head);
           card.appendChild(meta);
           card.appendChild(plan);
           var buttons = document.createElement('div');
@@ -1998,7 +2158,7 @@
       };
       move.appendChild(button);
       library.appendChild(move);
-      var context = addGroup(form, 'Context', 'Applies at the next load. Measured is the spare this console was tested with. Spill to RAM keeps a model that fills the GPU from stopping the app. Tight can fit a longer context and can fail a load.');
+      var context = addGroup(form, 'Context', 'Applies at the next load. Measured keeps every layer on the GPU and uses a smaller cache when a load would fill the console. Spill to RAM only when the leftover fits beside the GPU. Tight keeps less spare and a load can fail.');
       addSelect(context, 'Memory fit', 'memory', data.memory, [['measured', 'Measured'], ['tight', 'Tight'], ['roomy', 'More spare'], ['spill', 'Spill to RAM']], 'measured');
       addSelect(context, 'Longest context', 'ctx_cap', data.ctx_cap, [['4096', '4k'], ['8192', '8k'], ['16384', '16k'], ['32768', '32k'], ['65536', '64k'], ['131072', '128k']], '65536');
       addSelect(context, 'Context cache', 'kv_type', data.kv_type, [['auto', 'Auto'], ['f16', 'f16'], ['q8_0', 'q8_0'], ['q4_0', 'q4_0']], 'auto');
@@ -2067,6 +2227,7 @@
   document.getElementById('tab-projects').onclick = function () { showTab('projects'); };
   document.getElementById('tab-settings').onclick = function () { showTab('settings'); };
   document.getElementById('hf-go').onclick = searchHub;
+  document.getElementById('lib-scan').onclick = function () { loadLibrary(); };
   document.getElementById('hf-q').onkeydown = function (e) {
     e = e || window.event;
     var key = e.key || e.keyCode;

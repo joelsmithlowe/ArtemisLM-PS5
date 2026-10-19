@@ -104,8 +104,8 @@ int main(int argc, char ** argv) {
     assert(rp.reserve_gib > cp.reserve_gib);
     assert(has_args(rp, "-ngl", "999") && has_args(rp, "-fit", "off") && has_args(rp, "-cram", "0"));
 
-    // Nothing fits in too little memory. Spill keeps that file up by leaving
-    // layers in RAM. A model that already fits stays on the measured GPU path.
+    // A file larger than the pool does not fit. Spill cannot invent a second
+    // pool: the leftover has to fit in the host device beside the GPU heap.
     ps5lm::ModelInfo big;
     big.ok = true; big.file_bytes = 20ull << 30; big.n_layer = 32; big.n_head_kv = 8;
     big.key_length = big.value_length = 128;
@@ -113,12 +113,22 @@ int main(int argc, char ** argv) {
     ps5lm::RunOptions spill;
     spill.memory = "spill";
     const ps5lm::Plan sp = ps5lm::plan_model(big, budget, 65536, nullptr, spill);
-    assert(sp.fits && sp.why.find("RAM") != std::string::npos);
-    assert(!has_args(sp, "-ngl", "999") && has_args(sp, "-fit", "off") && has_args(sp, "-lm", "none"));
+    assert(!sp.fits && sp.why.find("beside the GPU") != std::string::npos);
     assert(ps5lm::plan_model(c, budget, 65536, nullptr, spill).fits);
     assert(has_args(ps5lm::plan_model(c, budget, 65536, nullptr, spill), "-ngl", "999"));
-    // A plan that fits with almost no spare still dies on the first token.
-    // Measured keeps full GPU layers when the spare is comfortable.
+    // Just over the budget, with a remainder the host pool can hold.
+    ps5lm::ModelInfo over;
+    over.ok = true;
+    over.file_bytes = (uint64_t) (11.6 * 1073741824.0);
+    over.n_layer = 32;
+    over.n_head_kv = 1;
+    over.key_length = over.value_length = 1;
+    assert(!ps5lm::plan_model(over, budget).fits);
+    const ps5lm::Plan osp = ps5lm::plan_model(over, budget, 65536, nullptr, spill);
+    assert(osp.fits && osp.why.find("RAM") != std::string::npos);
+    assert(!has_args(osp, "-ngl", "999") && has_args(osp, "-fit", "off") && has_args(osp, "-lm", "none"));
+    // A plan that fits with almost no spare stays on the GPU. Copying layers
+    // into RAM is the same pool, and that is what stopped the 27B load.
     ps5lm::ModelInfo cusp;
     cusp.ok = true;
     cusp.file_bytes = (10ull << 30) + (1ull << 29);
@@ -126,8 +136,28 @@ int main(int argc, char ** argv) {
     cusp.n_head_kv = 1;
     cusp.key_length = cusp.value_length = 1;
     const ps5lm::Plan cusp_plan = ps5lm::plan_model(cusp, budget);
-    assert(cusp_plan.fits && cusp_plan.why.find("RAM") != std::string::npos);
-    assert(!has_args(cusp_plan, "-ngl", "999") && has_args(cusp_plan, "-fit", "off") && has_args(cusp_plan, "-lm", "none"));
+    assert(cusp_plan.fits && cusp_plan.why.find("RAM") == std::string::npos);
+    assert(has_args(cusp_plan, "-ngl", "999") && has_args(cusp_plan, "-fit", "off") && has_args(cusp_plan, "-lm", "none"));
+    // The 27B IQ2_S load: 64k q8_0 filled 11.0 of 11.0 GiB, then 57 layers
+    // were moved to RAM and the app was killed. A smaller cache at 64k stays
+    // on the GPU. Tight still takes the larger cache.
+    ps5lm::ModelInfo iq2;
+    iq2.ok = true;
+    iq2.file_bytes = (uint64_t) (7.80 * 1073741824.0);
+    iq2.n_layer = 64;
+    iq2.full_attn_every = 4;
+    iq2.n_head_kv = 4;
+    iq2.key_length = iq2.value_length = 256;
+    iq2.state_bytes = 160ull << 20;
+    const ps5lm::Plan iq = ps5lm::plan_model(iq2, 11.01);
+    assert(iq.fits && iq.ctx == 65536 && iq.kv_type == "q4_0");
+    assert(iq.why.find("smaller cache") != std::string::npos);
+    assert(has_args(iq, "-ngl", "999") && has_args(iq, "-fit", "off"));
+    ps5lm::RunOptions iq_tight;
+    iq_tight.memory = "tight";
+    const ps5lm::Plan iqt = ps5lm::plan_model(iq2, 11.01, 65536, nullptr, iq_tight);
+    assert(iqt.fits && iqt.ctx == 65536 && iqt.kv_type == "q8_0");
+    assert(has_args(iqt, "-ngl", "999"));
     // f16 does not fit, but a short q4 cache holds every layer. Spill must
     // load that plan instead of refusing the file.
     ps5lm::ModelInfo forced;

@@ -16,6 +16,14 @@ namespace ps5lm {
 namespace {
 
 constexpr double kGiB = 1073741824.0;
+// A fit this close to the budget steps down to a smaller cache at the same
+// context. The measured 27B still stays at 64k when q4_0 is already the
+// smallest cache that fits. Moving those layers to RAM does not free memory.
+constexpr double kCacheRoomGib = 0.35;
+// Weights a spill may leave on the CPU. The console's CPU device was 2.13 GiB
+// beside an 11.44 GiB GPU heap. The rest of that host pool stays free: the
+// 27B load with 57 GPU layers filled it and the kernel stopped the app.
+constexpr double kHostCapGib = 1.25;
 
 // How many layers' weights fit in room_gib. n_layer means all of them.
 uint32_t layers_that_fit(double room_gib, double weights_gib, uint32_t n_layer) {
@@ -387,12 +395,20 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
     const uint32_t slots = run.slots < 1 ? 1 : run.slots > 2 ? 2 : run.slots;
 
     // The longest context first, and at each length the best cache that fits.
+    // A cache that lands within kCacheRoomGib of the budget is kept only when
+    // no smaller cache at that same context leaves the room. Shorter contexts
+    // are not used to buy that room: the measured 27B is already on q4_0.
     static const uint32_t ctxs[]  = { 131072, 65536, 32768, 16384, 8192, 4096 };
     static const char *   types[] = { "f16", "q8_0", "q4_0" };
+    bool stepped = false;
+    uint32_t packed_ctx = 0;
+    const char * packed_type = nullptr;
+    double packed_kv = 0, packed_total = 0;
     for (uint32_t ctx : ctxs) {
         if (ctx > ctx_cap) {
             continue;
         }
+        bool have_packed = false;
         for (const char * t : types) {
             if (kv_force && std::strcmp(t, kv_force) != 0) {
                 continue;
@@ -403,23 +419,45 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
             }
             const double kv    = kv_bytes_per_token(m, t) * ctx * slots / kGiB;
             const double total = p.weights_gib + kv + p.state_gib + p.reserve_gib;
-            if (total <= budget_gib) {
+            if (total > budget_gib) {
+                continue;
+            }
+            const double headroom = budget_gib - total;
+            if (run.memory == "tight" || headroom >= kCacheRoomGib) {
                 p.fits = true;
                 p.ctx = ctx;
                 p.kv_type = t;
                 p.kv_gib = kv;
                 p.total_gib = total;
+                stepped = have_packed;
                 break;
+            }
+            if (!have_packed) {
+                have_packed = true;
+                packed_ctx = ctx;
+                packed_type = t;
+                packed_kv = kv;
+                packed_total = total;
             }
         }
         if (p.fits) {
             break;
         }
+        if (have_packed) {
+            p.fits = true;
+            p.ctx = packed_ctx;
+            p.kv_type = packed_type;
+            p.kv_gib = packed_kv;
+            p.total_gib = packed_total;
+            break;
+        }
     }
 
-    // 999 keeps every layer on the GPU, the measured path. A plan that fills
-    // the heap, or Spill to RAM, leaves the layers that do not fit in ordinary
-    // memory. -lm none is already mmap without mlock, so those layers can page.
+    // 999 keeps every layer on the GPU. That is the measured path, including a
+    // plan that uses the last of the spare. Spill to RAM is only for a model
+    // that does not fit at all, and only for a remainder the host pool can
+    // hold. A fitting plan that also copies layers to RAM filled the pool on
+    // the 27B load (ngl 57, then the kernel ran out of internal memory).
     uint32_t gpu_layers = 999;
     char why[240];
     if (!p.fits) {
@@ -439,32 +477,30 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
                 std::snprintf(why, sizeof(why), "%uk context, q4_0 cache: %.1f of %.1f GiB",
                               p.ctx / 1024, p.total_gib, budget_gib);
                 p.why = why;
-                const double headroom = budget_gib - p.total_gib;
-                if (headroom < 0.20 && run.memory != "tight" && m.n_layer > 1) {
-                    const double keep = p.weights_gib - (0.80 - headroom);
-                    const uint32_t drop = layers_that_fit(keep > 0 ? keep : 0, p.weights_gib, m.n_layer);
-                    if (drop >= 1 && drop < m.n_layer) {
-                        gpu_layers = drop;
-                        p.total_gib = p.weights_gib * (double) drop / (double) m.n_layer + kv + p.state_gib + p.reserve_gib;
-                        p.why += ". Some layers stay in RAM so a full GPU does not stop the app";
-                    }
-                }
             } else if (room > 0.30 && ngl >= 1 && ngl < m.n_layer) {
-                p.fits = true;
-                p.ctx = ctx;
-                p.kv_type = "q4_0";
-                p.kv_gib = kv;
-                gpu_layers = ngl;
-                p.total_gib = p.weights_gib * (double) ngl / (double) m.n_layer + kv + p.state_gib + p.reserve_gib;
-                std::snprintf(why, sizeof(why), "%u of %u layers on the GPU, the rest in RAM, %uk context: %.1f GiB on the GPU",
-                              ngl, m.n_layer, p.ctx / 1024, p.total_gib);
-                p.why = why;
+                const double cpu_gib = p.weights_gib * (double) (m.n_layer - ngl) / (double) m.n_layer;
+                // The leftover has to fit in the host pool. The GPU heap and
+                // that pool are not two copies of the console's memory.
+                if (cpu_gib <= kHostCapGib) {
+                    p.fits = true;
+                    p.ctx = ctx;
+                    p.kv_type = "q4_0";
+                    p.kv_gib = kv;
+                    gpu_layers = ngl;
+                    p.total_gib = p.weights_gib * (double) ngl / (double) m.n_layer + kv + p.state_gib + p.reserve_gib;
+                    std::snprintf(why, sizeof(why), "%u of %u layers on the GPU, the rest in RAM, %uk context: %.1f GiB on the GPU",
+                                  ngl, m.n_layer, p.ctx / 1024, p.total_gib);
+                    p.why = why;
+                }
             }
         }
         if (!p.fits) {
             p.total_gib = p.weights_gib + p.state_gib + p.reserve_gib;
             std::snprintf(why, sizeof(why), "needs %.1f GiB with a 4k context; %.1f GiB is free", p.total_gib, budget_gib);
             p.why = why;
+            if (run.memory == "spill") {
+                p.why += ". The rest would not fit beside the GPU";
+            }
             return p;
         }
     } else {
@@ -472,16 +508,8 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
                       m.decision.empty() ? "" : ("decision model (" + m.decision + "), ").c_str(), p.ctx / 1024,
                       p.kv_type.c_str(), m.mmproj.empty() ? "" : ", images", p.total_gib, budget_gib);
         p.why = why;
-        // The first token has run past this spare when the plan uses the last
-        // of the heap. Tight is the choice that packs it in anyway.
-        const double headroom = budget_gib - p.total_gib;
-        if (headroom < 0.20 && run.memory != "tight" && m.n_layer > 1 && p.weights_gib > 0) {
-            const double keep = p.weights_gib - (0.80 - headroom);
-            const uint32_t ngl = layers_that_fit(keep > 0 ? keep : 0, p.weights_gib, m.n_layer);
-            if (ngl >= 1 && ngl < m.n_layer) {
-                gpu_layers = ngl;
-                p.why += ". Some layers stay in RAM so a full GPU does not stop the app";
-            }
+        if (stepped) {
+            p.why += ". A smaller cache leaves room so the load does not stop the app";
         }
     }
     const std::string ngl = gpu_layers == 999 ? std::string("999") : std::to_string(gpu_layers);

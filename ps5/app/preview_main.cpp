@@ -82,9 +82,13 @@ ps5lm::Live sample(float seconds, bool generating) {
                 { "soc5", 60 }, { "soc6", 58 } };
     L.cpu_ghz     = 3.5f;
     L.drives = { { "Internal storage", "/data/ArtemisLM/models", 8, 825 }, { "M.2 drive", "/mnt/ext0/ArtemisLM/models", 1520, 1863 }, { "USB drive", "/mnt/usb0/ArtemisLM/models", 455, 477 } };
-    L.pool_gib    = 11.44;
-    L.free_gib    = 0.31;
-    L.heap_gib    = 0.76;
+    L.pool_gib      = 11.44;
+    L.free_gib      = 0.31;
+    L.heap_gib      = 0.76;
+    L.vram_gib      = 11.44;
+    L.vram_free_gib = 0.48;
+    L.host_gib      = 2.13;
+    L.host_free_gib = 1.40;
     L.cpus        = 13;
     L.uptime_s    = 754 + seconds;
     L.tokens      = 4182;

@@ -57,6 +57,14 @@ Market * g_market = nullptr;
 double g_budget = 0;
 std::string g_running;
 std::string g_fault;
+struct ConsoleReading {
+    double pool_gib = 0, free_gib = 0, heap_gib = 0;
+    double vram_gib = 0, vram_free_gib = 0;
+    double host_gib = 0, host_free_gib = 0;
+    float  gpu = 0, cpu = 0;
+    float  soc_temp = -1000, cpu_temp = -1000, power_w = 0, fan = -1;
+};
+ConsoleReading g_console;
 std::atomic<int> g_gen{ 0 };
 std::atomic<bool> g_panel_stop{ false };
 std::atomic<int> g_panel_fd{ -1 };
@@ -246,12 +254,14 @@ std::string artemis_json() {
     std::string running;
     std::string fault;
     std::string agent = "off";
+    ConsoleReading console;
     {
         std::lock_guard<std::mutex> lock(g_mu);
         budget = g_budget;
         running = g_running;
         fault = g_fault;
         agent = load_settings(kSettingsPath).agent;
+        console = g_console;
     }
     const std::string ip = local_address();
     nlohmann::json out = {
@@ -264,6 +274,19 @@ std::string artemis_json() {
         { "loaded", running.empty() ? nlohmann::json(nullptr) : nlohmann::json(running) },
         { "fault", fault },
         { "note", "One model stays on the GPU. Any model name works on the chat port. LM Studio can use the mcp address." },
+        { "console", { { "pool_gib", console.pool_gib },
+                       { "free_gib", console.free_gib },
+                       { "heap_gib", console.heap_gib },
+                       { "vram_gib", console.vram_gib },
+                       { "vram_free_gib", console.vram_free_gib },
+                       { "host_gib", console.host_gib },
+                       { "host_free_gib", console.host_free_gib },
+                       { "gpu", console.gpu },
+                       { "cpu", console.cpu },
+                       { "soc_temp", console.soc_temp },
+                       { "cpu_temp", console.cpu_temp },
+                       { "power_w", console.power_w },
+                       { "fan", console.fan } } },
     };
     if (!ip.empty()) {
         out["chat"] = std::string("http://") + ip + ":" + std::to_string(kChatPort) + "/v1";
@@ -1440,6 +1463,23 @@ void panel_set_running(const std::string & path) {
 void panel_set_fault(const std::string & text) {
     std::lock_guard<std::mutex> lock(g_mu);
     g_fault = text;
+}
+
+void panel_set_console(const Live & live) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    g_console.pool_gib = live.pool_gib;
+    g_console.free_gib = live.free_gib;
+    g_console.heap_gib = live.heap_gib;
+    g_console.vram_gib = live.vram_gib;
+    g_console.vram_free_gib = live.vram_free_gib;
+    g_console.host_gib = live.host_gib;
+    g_console.host_free_gib = live.host_free_gib;
+    g_console.gpu = live.gpu_busy;
+    g_console.cpu = live.cpu_use;
+    g_console.soc_temp = live.soc_temp;
+    g_console.cpu_temp = live.cpu_temp;
+    g_console.power_w = live.soc_power_w;
+    g_console.fan = live.fan;
 }
 
 int panel_generation() { return g_gen.load(); }

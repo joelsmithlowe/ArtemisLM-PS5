@@ -10,6 +10,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "stats.hpp"
+
 #include <functional>
 #include <string>
 
@@ -31,6 +33,8 @@ void panel_set_budget(double budget_gib);
 void panel_set_running(const std::string & path);
 // Shown on /artemis when the model stops. Empty clears it.
 void panel_set_fault(const std::string & text);
+// The latest console readings, for /artemis. The page shows them beside chat.
+void panel_set_console(const Live & live);
 int  panel_generation();
 
 }  // namespace ps5lm

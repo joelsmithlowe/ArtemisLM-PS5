@@ -1,14 +1,38 @@
 # Changelog
 
-ArtemisLM PS5 0.12.8, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.8.zip`.
-`contentVersion` is `01.012.008`. Install this by copying the `PPSA98010` folder
-once. The copy already running reloads itself, so Settings does not finish the
-change. After this version is open, a later update closes the app. Open it
-again from the home screen.
+ArtemisLM PS5 0.12.9, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.9.zip`.
+`contentVersion` is `01.012.009`. If 0.12.8 is the open app, Settings writes this
+into the folder the console launched, marks the files, and closes. Open
+ArtemisLM again from the home screen. A copy still on 0.12.6 or 0.12.7 reloads
+itself, so copy the `PPSA98010` folder once to leave those versions.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.9] - 2026-10-19
+
+### Fixed
+
+- A load that already fits keeps every layer on the GPU. When the plan would
+  fill the console, it uses a smaller cache at the same context. Spill to RAM
+  runs only when the model does not fit and the leftover fits beside the GPU.
+  Copying layers into the same memory is what stopped the 27B load.
+- The out-of-memory page says a smaller cache or a shorter context leaves room.
+
+### Added
+
+- Home and Console show Memory, VRAM, and CPU memory apart. Memory is the
+  direct pool. VRAM is the GPU. CPU memory is the host device beside it.
+- The phone page shows those readings, with GPU, CPU, and temperature.
+- The library says whether a model will load. On the console a row says
+  Running, Fits, Too big, or Unreadable, and the title counts them. On the
+  phone, Scan checks the models already on the console.
+
+### Changed
+
+- The phone chat, message box, and buttons are larger. Library, Projects, and
+  Settings still hide the animated background.
 
 ## [0.12.8] - 2026-10-19
 
