@@ -34,10 +34,10 @@
     font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   #sky { position: fixed; left: 0; top: 0; z-index: 0; pointer-events: none; }
   body.away #sky { opacity: 0; visibility: hidden; }
-  .top, .usage, .nav, .scroll, .page, .composer { position: relative; z-index: 1; }
+  .top, .usage, .widgets, .nav, .scroll, .page, .composer { position: relative; z-index: 1; }
   body { display: flex; flex-direction: column; min-height: 100%; height: 100%; height: 100dvh; }
   button, textarea { font: inherit; color: inherit; }
-  button { cursor: pointer; }
+  button { cursor: pointer; -webkit-appearance: none; appearance: none; box-sizing: border-box; }
   button:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .top { display: flex; align-items: center; gap: 0.75rem;
@@ -54,6 +54,24 @@
     color: var(--body); font-size: 0.78rem; letter-spacing: 0.01em; }
   .meter.warm { color: var(--text); border-color: #3d3a62; }
   .meter.hot { color: #ffd0cc; border-color: #6a3034; background: #2a1618; }
+  .widgets { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.35rem 1rem 0.15rem; background: #0e0e14; }
+  .widget { background: #17171f; border: 1px solid #2c2c38; border-radius: 14px; padding: 0.55rem 0.75rem 0.65rem; }
+  .widget.off { display: none; }
+  .widget-row { display: flex; align-items: center; gap: 0.5rem; }
+  .widget-title { color: #f4f1ea; font-size: 0.875rem; font-weight: 650; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .widget-pct { margin-left: auto; color: #f4f1ea; font-size: 0.95rem; font-weight: 650; flex: none; }
+  .widget-go { flex: none; min-height: 30px; border-radius: 999px; border: 0; padding: 0 0.75rem;
+    background: #8b84f0; color: #14141c; font-size: 0.78rem; font-weight: 650; }
+  .widget-go:disabled { background: #1e1e28; color: #7d7888; }
+  .widget-note { color: #a39eae; font-size: 0.78rem; line-height: 1.35; margin-top: 0.35rem; }
+  .bar { height: 8px; margin-top: 0.45rem; border-radius: 999px; background: #12121a; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; border-radius: 999px; background: #8b84f0; }
+  .bar.busy .bar-fill { width: 35%;
+    -webkit-animation: bar-slide 1.1s ease-in-out infinite alternate;
+    animation: bar-slide 1.1s ease-in-out infinite alternate; }
+  @-webkit-keyframes bar-slide { from { margin-left: 0; } to { margin-left: 65%; } }
+  @keyframes bar-slide { from { margin-left: 0; } to { margin-left: 65%; } }
   .nav { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0.55rem 1rem 0.7rem; background: #0e0e14; }
   .tab { min-height: 40px; border: 1px solid var(--border); background: var(--surface);
     color: var(--muted); border-radius: 12px; padding: 0.35rem 0.95rem; font-weight: 650; }
@@ -117,7 +135,7 @@
   .bot { color: var(--body); line-height: 1.55; background: var(--surface);
     border: 1px solid var(--border); border-radius: 18px 18px 18px 6px;
     padding: 0.85rem 1rem; }
-  .answer { overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap; }
+  .answer { overflow-wrap: anywhere; word-wrap: break-word; white-space: normal; }
   .meta { display: block; color: var(--faint); font-size: 0.8125rem; margin-top: 0.45rem; }
   .err { color: var(--err); }
   .caret { display: inline-block; width: 0.45em; height: 1.05em; margin-left: 1px;
@@ -126,9 +144,9 @@
   .tools { display: flex; flex-direction: column; gap: 0.35rem; margin: 0 0 0.75rem; }
   .tools:empty { display: none; }
   .tool { background: transparent; border: 0; border-radius: 10px; padding: 0; }
-  .tool-name { display: block; width: 100%; text-align: left; background: transparent; border: 0;
-    color: var(--faint); font-size: 0.8125rem; font-weight: 650; letter-spacing: 0;
-    text-transform: none; padding: 0.15rem 0.15rem; min-height: 28px; }
+  .tool-name { display: block; width: 100%; box-sizing: border-box; text-align: left; background: transparent; border: 0;
+    color: var(--faint); font-size: 0.8125rem; font-weight: 600; letter-spacing: 0;
+    text-transform: none; padding: 0.2rem 0.15rem; min-height: 32px; line-height: 1.3; cursor: pointer; }
   .tool-name:before { content: "\25B8  "; }
   .tool.open .tool-name:before, .tool.bad .tool-name:before { content: "\25BE  "; }
   .tool-name:hover { color: var(--text); }
@@ -151,19 +169,23 @@
     font-size: 16px; line-height: 1.45; color: var(--text); background: #12121a;
     border: 1px solid var(--border); border-radius: 14px; padding: 0.7rem 0.8rem; }
   textarea::placeholder { color: var(--faint); }
-  .dock-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding-top: 0.45rem; }
+  .dock-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; padding-top: 0.4rem; }
   .sr-file { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
     clip: rect(0px, 0px, 0px, 0px); border: 0; }
-  .ghost { min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--raised);
-    color: var(--text); padding: 0 0.85rem; font-weight: 650; }
-  .ghost:hover { background: #2a2a36; }
-  .send { margin-left: auto; flex: none; min-width: 5.2rem; min-height: 44px; border: 0; border-radius: 12px;
-    background: var(--accent); color: var(--accent-ink); font-weight: 650; padding: 0 1.1rem; }
-  .send.stop { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
-  .menu { position: relative; }
-  .menu-panel { display: none; position: absolute; left: 0; bottom: calc(100% + 0.45rem); z-index: 6;
-    width: 20rem; max-width: calc(100vw - 2rem); background: #17171f; border: 1px solid var(--border);
-    border-radius: 16px; padding: 0.35rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
+  .ghost { flex: 0 0 auto; min-height: 32px; border-radius: 999px; border: 1px solid #2c2c38; border-color: var(--border);
+    background: #1a1a24; color: #a39eae; color: var(--muted); padding: 0 0.7rem;
+    font-size: 0.8125rem; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+  .ghost:hover { background: #2a2a36; color: var(--text); }
+  .ghost.on { color: #dedaf8; border-color: #4c4874; background: #221f36; }
+  .send { margin-left: auto; flex: 0 0 auto; min-width: 4.4rem; min-height: 32px; border: 0; border-radius: 999px;
+    background: #8b84f0; background: var(--accent); color: #14141c; color: var(--accent-ink);
+    font-size: 0.8125rem; font-weight: 650; padding: 0 0.9rem; line-height: 1.2; white-space: nowrap; }
+  .send.stop { background: #1e1e28; background: var(--raised); color: var(--text); border: 1px solid var(--border); }
+  .menu { position: relative; flex: 0 0 auto; }
+  .menu-panel { display: none; position: absolute; left: 0; bottom: calc(100% + 0.4rem); z-index: 6;
+    width: 16.5rem; max-width: calc(100vw - 2rem); max-height: 16rem; overflow: auto;
+    background: #17171f; border: 1px solid var(--border);
+    border-radius: 14px; padding: 0.3rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
   .menu.open .menu-panel { display: block; }
   .tool-row { display: flex; align-items: flex-start; gap: 0.6rem; min-height: 44px;
     padding: 0.4rem 0.45rem; border-radius: 10px; color: var(--body); }
@@ -172,10 +194,13 @@
   .tool-copy { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
   .tool-title { color: var(--text); font-size: 0.9rem; }
   .tool-hint { color: var(--faint); font-size: 0.78rem; line-height: 1.3; }
-  .pills { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0 0.45rem 0.15rem; }
+  .pills { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.45rem 0.05rem 0; }
   .pills:empty { display: none; }
-  .pill { color: var(--faint); font-size: 0.75rem; border: 1px solid var(--border);
-    border-radius: 999px; padding: 0.05rem 0.5rem; }
+  .pill { flex: 0 0 auto; min-height: 28px; border-radius: 999px; border: 1px solid #2c2c38; border-color: var(--border);
+    background: transparent; color: #7d7888; color: var(--faint); padding: 0 0.6rem;
+    font-size: 0.75rem; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+  .pill.on { color: #dedaf8; border-color: #4c4874; background: #221f36; }
+  .pill:disabled { color: #5c5868; border-color: #24242e; background: transparent; }
   .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; max-width: 42rem; margin: 0 auto 0.4rem; }
   .chips:empty { display: none; }
   .chip { display: flex; align-items: center; gap: 0.35rem; max-width: 100%;
@@ -196,11 +221,24 @@
   .me img { display: block; max-width: 100%; max-height: 180px; margin-top: 0.45rem; border-radius: 8px; }
   .chip img { width: 22px; height: 22px; object-fit: cover; border-radius: 6px; }
   .codewrap { margin: 0.45rem 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #12121a; }
-  .codebar { display: flex; justify-content: flex-end; }
+  .codebar { display: flex; align-items: center; justify-content: space-between; }
+  .codelang { color: var(--faint); font-size: 0.72rem; padding: 0.2rem 0.65rem; }
   .codebar button { min-height: 28px; border: 0; background: transparent; color: var(--muted); padding: 0.15rem 0.55rem; }
   .code { margin: 0; padding: 0.15rem 0.8rem 0.75rem; overflow: auto; white-space: pre;
     font-family: Consolas, "Courier New", monospace; font-size: 0.85rem; color: var(--body); }
-  .prose { white-space: pre-wrap; }
+  .prose { white-space: normal; }
+  .prose p { margin: 0.35rem 0; }
+  .mdh { font-weight: 650; color: #f4f1ea; margin: 0.75rem 0 0.28rem; line-height: 1.3; }
+  .answer ul, .answer ol { margin: 0.25rem 0 0.5rem; padding-left: 1.25rem; }
+  .answer li { margin: 0.12rem 0; }
+  .icode { font-family: Consolas, "Courier New", monospace; font-size: 0.86em;
+    background: #1a1a24; border: 1px solid #2a2a36; border-radius: 5px; padding: 0.05em 0.32em; }
+  .math { font-family: Georgia, "Times New Roman", serif; }
+  .math.display { display: block; margin: 0.55rem 0; text-align: center; font-size: 1.12rem; overflow-x: auto; }
+  .sup { font-size: 0.72em; vertical-align: super; line-height: 0; }
+  .sub { font-size: 0.72em; vertical-align: sub; line-height: 0; }
+  .run-frame { display: block; width: 100%; height: 16rem; margin: 0.35rem 0 0.5rem;
+    border: 1px solid var(--border); border-radius: 10px; background: #fff; }
   .preview { width: 100%; height: 22rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; margin-top: 0.6rem; }
   .preview.off { display: none; }
   .menu-note { color: var(--faint); font-size: 0.8125rem; line-height: 1.35; margin: 0.15rem 0 0.35rem; }
@@ -246,6 +284,33 @@
   <span class="meter" id="use-cpu">CPU</span>
   <span class="meter" id="use-temp">Temp</span>
 </div>
+<div class="widgets" id="widgets">
+  <div class="widget off" id="load-widget">
+    <div class="widget-row">
+      <div class="widget-title" id="load-title">Loading</div>
+      <div class="widget-pct" id="load-pct"></div>
+    </div>
+    <div class="bar busy" id="load-bar"><div class="bar-fill" id="load-fill"></div></div>
+    <div class="widget-note" id="load-note"></div>
+  </div>
+  <div class="widget off" id="upd-widget">
+    <div class="widget-row">
+      <div class="widget-title" id="upd-widget-title">Update</div>
+      <div class="widget-pct" id="upd-pct"></div>
+      <button class="widget-go" type="button" id="upd-widget-go">Install</button>
+    </div>
+    <div class="bar" id="upd-bar"><div class="bar-fill" id="upd-fill"></div></div>
+    <div class="widget-note" id="upd-widget-note"></div>
+  </div>
+  <div class="widget off" id="dl-widget">
+    <div class="widget-row">
+      <div class="widget-title" id="dl-title">Download</div>
+      <div class="widget-pct" id="dl-pct"></div>
+    </div>
+    <div class="bar" id="dl-bar"><div class="bar-fill" id="dl-fill"></div></div>
+    <div class="widget-note" id="dl-note"></div>
+  </div>
+</div>
 
 <div class="scroll" id="scroll">
   <div class="column" id="log">
@@ -283,7 +348,7 @@
 
 <div class="page off" id="view-projects">
   <div class="column">
-    <p class="note">Projects live in /data/ArtemisLM/projects, next to the models folder. Ask in Chat and the files are saved here. This console stores and reviews them. It does not start Node or Python. A web page can be previewed below.</p>
+    <p class="note">Projects live in /data/ArtemisLM/projects, next to the models folder. Ask in Chat and the files are saved here. Run checks a web page in this browser. Check reviews a Node or Python project in this process. This console does not start Node or Python.</p>
     <div class="rowbtns">
       <button id="proj-ask" class="primary" type="button">Ask chat to build a page</button>
     </div>
@@ -310,6 +375,7 @@
       <textarea id="input" rows="1" placeholder="Message" autocomplete="off"></textarea>
       <div class="pills" id="tool-pills"></div>
       <div class="dock-row">
+        <button class="ghost" type="button" id="think-btn" aria-pressed="false">Think</button>
         <div class="menu" id="tool-menu">
           <button class="ghost" type="button" id="tool-toggle">Tools</button>
           <div class="menu-panel" id="tool-panel"></div>
@@ -329,8 +395,8 @@
   var CLOCK_WORDS = ['today', 'tonight', 'now', 'current', 'latest', 'date', 'time', 'day', 'weather', 'price', 'rate', 'exchange'];
   var SKIP = { what: 1, whats: 1, is: 1, the: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, for: 1, me: 1, tell: 1, please: 1, right: 1, this: 1, it: 1, its: 1, and: 1, or: 1, do: 1, you: 1, can: 1, how: 1, about: 1, there: 1, here: 1, from: 1, with: 1, that: 1, my: 1, your: 1, our: 1, who: 1, when: 1, where: 1, why: 1, which: 1, today: 1, tonight: 1, now: 1, current: 1, latest: 1, date: 1, time: 1, day: 1, weather: 1, price: 1, rate: 1, exchange: 1, news: 1, console: 1, playstation: 1, ps5: 1, artemis: 1, artemislm: 1, phone: 1, clock: 1 };
   var TOOL_NAMES = { get_datetime: 1, web_search: 1, web_fetch: 1 };
-  var PROJECT_NAMES = { project_list: 1, project_create: 1, project_read: 1, project_write: 1, project_review: 1, project_remove: 1 };
-  var PROJECT_TOOL = { project_list: 'list', project_create: 'create', project_read: 'read', project_write: 'write', project_review: 'review', project_remove: 'remove' };
+  var PROJECT_NAMES = { project_list: 1, project_create: 1, project_read: 1, project_write: 1, project_review: 1, project_build: 1, project_remove: 1 };
+  var PROJECT_TOOL = { project_list: 'list', project_create: 'create', project_read: 'read', project_write: 'write', project_review: 'review', project_build: 'build', project_remove: 'remove' };
   var MEMORY_NAMES = { memory_save: 1, memory_find: 1, memory_list: 1, memory_forget: 1 };
   var MEMORY_TOOL = { memory_save: 'save', memory_find: 'find', memory_list: 'list', memory_forget: 'forget' };
   var FILES_NAMES = { files_list: 1, files_read: 1 };
@@ -347,6 +413,8 @@
     'Code a small web page on this console'
   ];
   var toolOn = { search: true, clock: true, projects: true, files: true, notes: true, reference: true };
+  var thinkOn = false;
+  var builtPage = '';
   var toolTouched = false;
   var attachments = [];
   var visionOn = false;
@@ -476,15 +544,28 @@
 
   function addTool(parent, title, body, bad) {
     var card = document.createElement('div');
-    card.className = bad ? 'tool bad' : 'tool';
-    var name = document.createElement('button');
-    name.type = 'button';
+    card.className = bad ? 'tool bad open' : 'tool open';
+    var name = document.createElement('div');
     name.className = 'tool-name';
+    name.setAttribute('role', 'button');
+    name.tabIndex = 0;
     name.textContent = title;
-    name.onclick = function () {
+    function flipTool() {
       var isBad = card.className.indexOf('bad') >= 0;
-      var open = card.className.indexOf('open') >= 0;
+      var open = card.className.indexOf(' open') >= 0;
       card.className = (isBad ? 'tool bad' : 'tool') + (open ? '' : ' open');
+    }
+    name.onclick = function (e) {
+      if (e && e.preventDefault) e.preventDefault();
+      flipTool();
+    };
+    name.onkeydown = function (e) {
+      e = e || window.event;
+      var key = e.key || e.keyCode;
+      if (key === 'Enter' || key === 13 || key === ' ' || key === 32) {
+        if (e.preventDefault) e.preventDefault();
+        flipTool();
+      }
     };
     var text = document.createElement('div');
     text.className = 'tool-body';
@@ -500,9 +581,10 @@
     var s = 'You are ArtemisLM PS5, running on a PlayStation 5. When the message includes a clock reading or web search results, answer from those. Do not invent a rate, a price or a date. If the search failed or has no figure, say so. Be direct.';
     if (toolOn.search) s += ' Call web_fetch on one link only when the snippet is not enough.';
     if (toolOn.projects && fileToolsOn) {
-      s += ' You can write apps on this console. Projects are folders in /data/ArtemisLM/projects. A review that says this console cannot start Node or Python means the process is not launched. The files are still saved. Do not say you cannot code or that you have no tools.';
-      if (kind === 'code') s += ' Call project_create, then project_write for each source file, then project_review. Name the folder and tell the user to open the Projects tab. Fix every review error before you say the build is ready. Kinds are node-server, static-page and python. Keep each file under 12000 characters. Allowed endings are .js .mjs .cjs .json .html .css .md .txt .py .svg. Put page script in a .js file. Do not use a JavaScript regex literal; use new RegExp.';
+      s += ' You can write apps on this console. Projects are folders in /data/ArtemisLM/projects. A review that says this console cannot start Node or Python means the process is not launched. The files are still saved. Call project_build after writing. It checks linked files in this process. A web page opens in the preview. Do not say you cannot code or that you have no tools.';
+      if (kind === 'code') s += ' Call project_create, then project_write for each source file, then project_review, then project_build. Name the folder and tell the user to open the Projects tab. Fix every review error before you say the build is ready. Kinds are node-server, static-page and python. Keep each file under 12000 characters. Allowed endings are .js .mjs .cjs .json .html .css .md .txt .py .svg. Put page script in a .js file. Do not use a JavaScript regex literal; use new RegExp.';
     } else if (!fileToolsOn) s += ' File tools are off in Settings, so projects, files and notes are unavailable until that switch is on.';
+    if (turn && turn.think) s += ' Think is on for this turn. Reason before the answer. Call every tool that is switched on when it can check a figure, a date, a file, a note, or a project. Do not guess something a tool can read.';
     if (referenceTurn || toolOn.reference) s += ' Call convert_units, calendar, lookup, or text_codec for a figure stored on this console. Use a reference line you are given and do not replace it.';
     return s;
   }
@@ -616,7 +698,8 @@
       { type: 'function', function: { name: 'project_create', description: 'Create a project folder and a small starter. Kinds: node-server, static-page, python.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Folder name: a letter or digit, then letters, digits, _ or -, up to 32.' }, kind: { type: 'string', description: 'node-server, static-page, or python' } }, required: ['name', 'kind'] } } },
       { type: 'function', function: { name: 'project_read', description: 'Read one file from a project.', parameters: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string', description: 'Relative path inside the project' } }, required: ['name', 'path'] } } },
       { type: 'function', function: { name: 'project_write', description: 'Write one text file inside a project. Overwrites. At most 12000 characters.', parameters: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' }, text: { type: 'string' } }, required: ['name', 'path', 'text'] } } },
-      { type: 'function', function: { name: 'project_review', description: 'Check the project files in this process. A passing review still does not run Node or Python.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
+      { type: 'function', function: { name: 'project_review', description: 'Check the project files in this process. Then call project_build. A passing review still does not run Node or Python.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
+      { type: 'function', function: { name: 'project_build', description: 'Check the project in this process. A web page is previewed in the chat. Does not start Node or Python.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
       { type: 'function', function: { name: 'project_remove', description: 'Delete one file inside a project. Does not delete the project folder.', parameters: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'] } } }
     ];
   }
@@ -745,8 +828,10 @@
     }
     if (call.name === 'web_search' && !params.query) params.query = call.args || '';
     callTool(call.name, params, function (error, data) {
+      builtPage = '';
       var shown = error ? error : JSON.stringify(data);
       var soft = false;
+      if (!error && data && data.ok !== false && typeof data.page === 'string' && data.page) builtPage = data.page;
       if (!error && data) {
         if (typeof data.results === 'string') shown = data.results;
         else if (data.hits) {
@@ -780,21 +865,39 @@
   function streamAnswer(holder, messages, tools, round) {
     var answer = holder.answer;
     var body = '';
+    var reason = '';
     var calls = [];
     var seen = 0;
     var pending = '';
+    var drawAt = 0;
     var req = new XMLHttpRequest();
     xhr = req;
     req.open('POST', '/v1/chat/completions');
     req.setRequestHeader('Content-Type', 'application/json');
+    function paint(final) {
+      var split = splitThink(body);
+      var thoughtText = trim((reason ? reason + '\n' : '') + (split.thought || ''));
+      var view = split.answer;
+      if (final && !trim(view) && thoughtText) {
+        view = thoughtText;
+        thoughtText = '';
+        clearThought(holder);
+      }
+      var now = Date.now();
+      if (!final && now - drawAt < 140) return view;
+      drawAt = now;
+      if (thoughtText) showThought(holder, thoughtText, final ? 'Thought' : 'Thinking');
+      if (trim(view)) fillAnswer(answer, view);
+      bottom();
+      return view;
+    }
     function take(chunk) {
       var choice = chunk.choices && chunk.choices[0];
       var delta = choice && choice.delta;
       if (!delta) return;
-      if (delta.content) {
-        body += delta.content;
-        answer.textContent = body;
-      }
+      if (typeof delta.reasoning_content === 'string') reason += delta.reasoning_content;
+      else if (typeof delta.reasoning === 'string') reason += delta.reasoning;
+      if (delta.content) body += delta.content;
       var list = delta.tool_calls;
       if (!list) return;
       for (var i = 0; i < list.length; i++) {
@@ -820,11 +923,12 @@
         if (data === '[DONE]') continue;
         try { take(JSON.parse(data)); } catch (e) {}
       }
-      bottom();
+      paint(false);
     };
     req.onloadend = function () {
       if (xhr === req) xhr = null;
       req.onprogress();
+      var view = paint(true);
       if (turn && turn.cancelled) return finishStop(holder, body);
       var usable = [];
       for (var i = 0; i < calls.length; i++) {
@@ -838,12 +942,16 @@
       }
       var rounds = 2;
       var batch = 2;
-      if (offered(tools, 'project_review')) {
-        rounds = 10;
-        batch = 4;
+      var thinking = !!(turn && turn.think);
+      if (offered(tools, 'project_review') || offered(tools, 'project_build')) {
+        rounds = thinking ? 14 : 10;
+        batch = thinking ? 6 : 4;
       } else if (offered(tools, 'files_list') || offered(tools, 'memory_forget')) {
-        rounds = 3;
-        batch = 2;
+        rounds = thinking ? 6 : 3;
+        batch = thinking ? 4 : 2;
+      } else if (thinking && tools.length) {
+        rounds = 6;
+        batch = 3;
       }
       if (usable.length > batch) usable = usable.slice(0, batch);
       if (usable.length && round < rounds && tools.length) {
@@ -867,6 +975,7 @@
           else if (call.name === 'project_read') label = 'Read file';
           else if (call.name === 'project_list') label = 'List projects';
           else if (call.name === 'project_review') label = 'Review build';
+          else if (call.name === 'project_build') label = 'Build project';
           else if (call.name === 'project_remove') label = 'Delete file';
           else if (call.name === 'memory_save') label = 'Save note';
           else if (call.name === 'memory_find') label = 'Find notes';
@@ -882,6 +991,10 @@
           runToolCall(call, function (error, shown) {
             slot.textContent = shown;
             if (error) slot.parentNode.className = 'tool bad';
+            if (builtPage) {
+              mountPreview(slot.parentNode, builtPage);
+              builtPage = '';
+            }
             messages.push({ role: 'tool', tool_call_id: call.id, content: shown });
             nextCall();
           });
@@ -890,7 +1003,7 @@
         return;
       }
       if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
-      if (!body) {
+      if (!trim(view) && !body && !reason) {
         if (req.status === 0) {
           var faultTurn = turn;
           consoleFault('The console did not answer.', function (text) {
@@ -901,8 +1014,8 @@
         return;
       }
       else {
-        fillAnswer(answer, body);
-        history.push({ role: 'assistant', content: body });
+        if (!trim(view) && (body || reason)) fillAnswer(answer, trim(view) || body);
+        history.push({ role: 'assistant', content: trim(view) || body });
         if (history.length > rememberCap()) history = history.slice(history.length - rememberCap());
       }
       turn = null;
@@ -910,15 +1023,18 @@
       bottom();
       input.focus();
     };
-    var payload = { messages: messages, stream: true, chat_template_kwargs: { enable_thinking: false } };
+    var payload = { messages: messages, stream: true, chat_template_kwargs: { enable_thinking: !!(turn && turn.think) } };
     if (tools.length) payload.tools = tools;
     req.send(JSON.stringify(payload));
   }
 
   function finishStop(holder, body) {
     if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
-    if (!trim(holder.answer.textContent)) holder.answer.textContent = 'Stopped.';
-    if (body) history.push({ role: 'assistant', content: body });
+    var split = splitThink(body || '');
+    var view = trim(split.answer) || trim(split.thought);
+    if (view) fillAnswer(holder.answer, view);
+    else if (!trim(holder.answer.textContent)) holder.answer.textContent = 'Stopped.';
+    if (view || body) history.push({ role: 'assistant', content: view || body });
     turn = null;
     busy(false);
     bottom();
@@ -935,54 +1051,569 @@
     bottom();
     if (input && input.focus) input.focus();
   }
+  function splitThink(raw) {
+    var text = String(raw || '');
+    var pairs = [
+      ['<' + 'think>', '<' + '/think>'],
+      ['<' + 'thinking>', '<' + '/thinking>']
+    ];
+    var thought = '';
+    var visible = '';
+    var open = false;
+    var i = 0;
+    while (i < text.length) {
+      var hit = -1;
+      var which = -1;
+      var p;
+      for (p = 0; p < pairs.length; p++) {
+        var at = text.indexOf(pairs[p][0], i);
+        if (at >= 0 && (hit < 0 || at < hit)) {
+          hit = at;
+          which = p;
+        }
+      }
+      if (which < 0) {
+        visible += text.substring(i);
+        break;
+      }
+      visible += text.substring(i, hit);
+      var closeAt = text.indexOf(pairs[which][1], hit + pairs[which][0].length);
+      if (closeAt < 0) {
+        thought += text.substring(hit + pairs[which][0].length);
+        open = true;
+        break;
+      }
+      thought += text.substring(hit + pairs[which][0].length, closeAt);
+      i = closeAt + pairs[which][1].length;
+    }
+    return { thought: trim(thought), answer: visible, open: open };
+  }
+  function showThought(holder, text, title) {
+    if (!holder.thought) {
+      holder.thought = addTool(holder.tools, title || 'Thinking', text, false);
+    }
+    holder.thought.textContent = text;
+    if (holder.thought.parentNode && holder.thought.parentNode.firstChild) {
+      holder.thought.parentNode.firstChild.textContent = title || 'Thinking';
+    }
+  }
+  function clearThought(holder) {
+    if (holder.thought && holder.thought.parentNode && holder.thought.parentNode.parentNode) {
+      holder.thought.parentNode.parentNode.removeChild(holder.thought.parentNode);
+    }
+    holder.thought = null;
+  }
+  function mountPreview(card, html) {
+    if (!card) return;
+    var frame = document.createElement('iframe');
+    frame.className = 'run-frame';
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.title = 'Project preview';
+    try { frame.srcdoc = html; } catch (e) { return; }
+    card.appendChild(frame);
+  }
+  function readBrace(s, i) {
+    if (s.charAt(i) !== '{') return null;
+    var depth = 0;
+    var j;
+    for (j = i; j < s.length; j++) {
+      var c = s.charAt(j);
+      if (c === '{') depth += 1;
+      else if (c === '}') {
+        depth -= 1;
+        if (depth === 0) return { inner: s.substring(i + 1, j), end: j + 1 };
+      }
+    }
+    return null;
+  }
+  function skipSpaceAt(s, i) {
+    while (s.charAt(i) === ' ') i += 1;
+    return i;
+  }
+  function superGlyph(ch) {
+    if (ch >= '0' && ch <= '9') return '\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079'.charAt(ch.charCodeAt(0) - 48);
+    if (ch === '+') return '\u207a';
+    if (ch === '-') return '\u207b';
+    if (ch === '=') return '\u207c';
+    if (ch === '(') return '\u207d';
+    if (ch === ')') return '\u207e';
+    if (ch === 'n') return '\u207f';
+    if (ch === 'i') return '\u2071';
+    return '';
+  }
+  function subGlyph(ch) {
+    if (ch >= '0' && ch <= '9') return '\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089'.charAt(ch.charCodeAt(0) - 48);
+    if (ch === '+') return '\u208a';
+    if (ch === '-') return '\u208b';
+    if (ch === '=') return '\u208c';
+    if (ch === '(') return '\u208d';
+    if (ch === ')') return '\u208e';
+    if (ch === 'a') return '\u2090';
+    if (ch === 'e') return '\u2091';
+    if (ch === 'o') return '\u2092';
+    if (ch === 'x') return '\u2093';
+    if (ch === 'h') return '\u2095';
+    if (ch === 'k') return '\u2096';
+    if (ch === 'l') return '\u2097';
+    if (ch === 'm') return '\u2098';
+    if (ch === 'n') return '\u2099';
+    if (ch === 'p') return '\u209a';
+    if (ch === 's') return '\u209b';
+    if (ch === 't') return '\u209c';
+    return '';
+  }
+  function scriptChars(chunk, sup) {
+    var out = '';
+    var i;
+    for (i = 0; i < chunk.length; i++) {
+      var g = sup ? superGlyph(chunk.charAt(i)) : subGlyph(chunk.charAt(i));
+      if (!g) return '';
+      out += g;
+    }
+    return out;
+  }
+  var MATH_CMD = {
+    alpha: '\u03b1', beta: '\u03b2', gamma: '\u03b3', delta: '\u03b4', epsilon: '\u03b5', varepsilon: '\u03b5',
+    zeta: '\u03b6', eta: '\u03b7', theta: '\u03b8', vartheta: '\u03b8', iota: '\u03b9', kappa: '\u03ba',
+    lambda: '\u03bb', mu: '\u03bc', nu: '\u03bd', xi: '\u03be', pi: '\u03c0', rho: '\u03c1',
+    sigma: '\u03c3', tau: '\u03c4', upsilon: '\u03c5', phi: '\u03c6', varphi: '\u03c6', chi: '\u03c7',
+    psi: '\u03c8', omega: '\u03c9',
+    Gamma: '\u0393', Delta: '\u0394', Theta: '\u0398', Lambda: '\u039b', Xi: '\u039e', Pi: '\u03a0',
+    Sigma: '\u03a3', Phi: '\u03a6', Psi: '\u03a8', Omega: '\u03a9',
+    times: '\u00d7', div: '\u00f7', pm: '\u00b1', mp: '\u2213', cdot: '\u00b7',
+    leq: '\u2264', geq: '\u2265', neq: '\u2260', le: '\u2264', ge: '\u2265', ne: '\u2260',
+    approx: '\u2248', equiv: '\u2261', infty: '\u221e', sum: '\u2211', prod: '\u220f',
+    int: '\u222b', partial: '\u2202', nabla: '\u2207', notin: '\u2209',
+    subset: '\u2282', supset: '\u2283', cup: '\u222a', cap: '\u2229',
+    to: '\u2192', rightarrow: '\u2192', leftarrow: '\u2190', Rightarrow: '\u21d2',
+    leftrightarrow: '\u2194', ldots: '\u2026', cdots: '\u22ef',
+    degree: '\u00b0', deg: '\u00b0', circ: '\u00b0', propto: '\u221d',
+    sim: '\u223c', simeq: '\u2243', cong: '\u2245', forall: '\u2200', exists: '\u2203',
+    hbar: '\u210f', ell: '\u2113', angle: '\u2220', perp: '\u27c2',
+    ll: '\u226a', gg: '\u226b', celsius: '\u2103', micro: '\u00b5',
+    quad: ' ', qquad: '  '
+  };
+  MATH_CMD['in'] = '\u2208';
+  function replaceFracs(s) {
+    var out = '';
+    var i = 0;
+    while (i < s.length) {
+      var len = 0;
+      if (s.substring(i, i + 6) === '\\dfrac' || s.substring(i, i + 6) === '\\tfrac') len = 6;
+      else if (s.substring(i, i + 5) === '\\frac') len = 5;
+      if (len) {
+        var a = readBrace(s, skipSpaceAt(s, i + len));
+        if (a) {
+          var b = readBrace(s, skipSpaceAt(s, a.end));
+          if (b) {
+            out += mathFlat(a.inner) + '\u2044' + mathFlat(b.inner);
+            i = b.end;
+            continue;
+          }
+        }
+      }
+      out += s.charAt(i);
+      i += 1;
+    }
+    return out;
+  }
+  function replaceSqrts(s) {
+    var out = '';
+    var i = 0;
+    while (i < s.length) {
+      if (s.substring(i, i + 5) === '\\sqrt') {
+        var at = skipSpaceAt(s, i + 5);
+        var br = readBrace(s, at);
+        if (br) {
+          var inner = mathFlat(br.inner);
+          out += '\u221a' + (inner.length > 1 ? '(' + inner + ')' : inner);
+          i = br.end;
+          continue;
+        }
+      }
+      out += s.charAt(i);
+      i += 1;
+    }
+    return out;
+  }
+  function replaceCommands(s) {
+    var out = '';
+    var i = 0;
+    while (i < s.length) {
+      if (s.charAt(i) === '\\' && i + 1 < s.length) {
+        var n = s.charAt(i + 1);
+        if (n === '{' || n === '}' || n === '%' || n === '&' || n === '_' || n === '^') {
+          out += n;
+          i += 2;
+          continue;
+        }
+        if (n === ',' || n === ' ') {
+          out += n === ',' ? ' ' : ' ';
+          i += 2;
+          continue;
+        }
+        if (n === '\\') {
+          out += ' ';
+          i += 2;
+          continue;
+        }
+        if ((n >= 'a' && n <= 'z') || (n >= 'A' && n <= 'Z')) {
+          var j = i + 1;
+          while (j < s.length) {
+            var c = s.charAt(j);
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) j += 1;
+            else break;
+          }
+          var name = s.substring(i + 1, j);
+          if (name === 'left' || name === 'right' || name === 'big' || name === 'Big' || name === 'bigg') {
+            i = j;
+            continue;
+          }
+          if (name === 'text' || name === 'mathrm' || name === 'mathbf' || name === 'mathit' || name === 'mathbb' || name === 'operatorname') {
+            var br = readBrace(s, skipSpaceAt(s, j));
+            if (br) {
+              out += br.inner;
+              i = br.end;
+              continue;
+            }
+          }
+          if (MATH_CMD[name] !== undefined) {
+            out += MATH_CMD[name];
+            i = j;
+            continue;
+          }
+        }
+      }
+      out += s.charAt(i);
+      i += 1;
+    }
+    return out;
+  }
+  function mathFlat(src) {
+    return replaceCommands(replaceSqrts(replaceFracs(String(src || ''))));
+  }
+  function appendScripts(parent, text, letters) {
+    var i = 0;
+    var buf = '';
+    function flush() {
+      if (!buf) return;
+      parent.appendChild(document.createTextNode(buf));
+      buf = '';
+    }
+    while (i < text.length) {
+      var c = text.charAt(i);
+      if ((c === '^' || c === '_') && i + 1 < text.length) {
+        var sup = c === '^';
+        var chunk = '';
+        var end = i + 1;
+        if (text.charAt(end) === '{') {
+          var br = readBrace(text, end);
+          if (br) {
+            chunk = br.inner;
+            end = br.end;
+          }
+        }
+        if (!chunk && text.charAt(end) && text.charAt(end) !== ' ') {
+          chunk = text.charAt(end);
+          end += 1;
+          var sign = chunk === '+' || chunk === '-';
+          if ((sign || (chunk >= '0' && chunk <= '9')) && end < text.length && text.charAt(end) >= '0' && text.charAt(end) <= '9') {
+            while (end < text.length && text.charAt(end) >= '0' && text.charAt(end) <= '9') {
+              chunk += text.charAt(end);
+              end += 1;
+            }
+          }
+        }
+        if (chunk) {
+          var digits = true;
+          var k;
+          for (k = 0; k < chunk.length; k++) {
+            var ch = chunk.charAt(k);
+            if (!((ch >= '0' && ch <= '9') || ch === '+' || ch === '-' || ch === '(' || ch === ')' || ch === '=')) digits = false;
+          }
+          var glyph = (letters || digits) ? scriptChars(chunk, sup) : '';
+          if (glyph) {
+            flush();
+            parent.appendChild(document.createTextNode(glyph));
+            i = end;
+            continue;
+          }
+          if (letters) {
+            flush();
+            var span = document.createElement('span');
+            span.className = sup ? 'sup' : 'sub';
+            span.textContent = chunk;
+            parent.appendChild(span);
+            i = end;
+            continue;
+          }
+        }
+      }
+      buf += c;
+      i += 1;
+    }
+    flush();
+  }
+  function appendPlain(parent, text) {
+    appendScripts(parent, mathFlat(text), false);
+  }
+  function appendMathRegion(parent, src, display) {
+    var el = document.createElement(display ? 'div' : 'span');
+    el.className = display ? 'math display' : 'math';
+    appendScripts(el, mathFlat(src), true);
+    parent.appendChild(el);
+  }
+  function looksMath(inner) {
+    if (!inner || inner.length > 160 || inner.indexOf('\n') >= 0) return false;
+    if (inner.indexOf('\\') >= 0 || inner.indexOf('^') >= 0 || inner.indexOf('_') >= 0) return true;
+    return inner.indexOf('=') >= 0;
+  }
+  function renderInline(parent, text) {
+    var s = String(text || '');
+    var tick = String.fromCharCode(96);
+    var i = 0;
+    var buf = '';
+    function flush() {
+      if (!buf) return;
+      var parts = buf.split('\n');
+      var p;
+      for (p = 0; p < parts.length; p++) {
+        if (p) parent.appendChild(document.createElement('br'));
+        if (parts[p]) appendPlain(parent, parts[p]);
+      }
+      buf = '';
+    }
+    while (i < s.length) {
+      if (s.charAt(i) === tick) {
+        var endTick = s.indexOf(tick, i + 1);
+        if (endTick > i + 1 && s.substring(i + 1, endTick).indexOf('\n') < 0) {
+          flush();
+          var code = document.createElement('code');
+          code.className = 'icode';
+          code.textContent = s.substring(i + 1, endTick);
+          parent.appendChild(code);
+          i = endTick + 1;
+          continue;
+        }
+      }
+      if (s.substring(i, i + 2) === '\\(') {
+        var endMath = s.indexOf('\\)', i + 2);
+        if (endMath > i) {
+          flush();
+          appendMathRegion(parent, s.substring(i + 2, endMath), false);
+          i = endMath + 2;
+          continue;
+        }
+      }
+      if (s.charAt(i) === '$' && s.charAt(i + 1) !== '$' && s.charAt(i + 1) !== ' ') {
+        var endDollar = s.indexOf('$', i + 1);
+        if (endDollar > i + 1 && s.charAt(endDollar - 1) !== ' ') {
+          var inner = s.substring(i + 1, endDollar);
+          if (looksMath(inner)) {
+            flush();
+            appendMathRegion(parent, inner, false);
+            i = endDollar + 1;
+            continue;
+          }
+        }
+      }
+      if (s.substring(i, i + 2) === '**') {
+        var endBold = s.indexOf('**', i + 2);
+        if (endBold > i + 2 && s.substring(i + 2, endBold).indexOf('\n') < 0) {
+          flush();
+          var strong = document.createElement('strong');
+          renderInline(strong, s.substring(i + 2, endBold));
+          parent.appendChild(strong);
+          i = endBold + 2;
+          continue;
+        }
+      }
+      if (s.charAt(i) === '*' && s.charAt(i + 1) && s.charAt(i + 1) !== '*' && s.charAt(i + 1) !== ' ') {
+        var endEm = s.indexOf('*', i + 1);
+        if (endEm > i + 1 && s.charAt(endEm - 1) !== ' ' && s.charAt(endEm + 1) !== '*' && s.substring(i + 1, endEm).indexOf('\n') < 0) {
+          flush();
+          var em = document.createElement('em');
+          renderInline(em, s.substring(i + 1, endEm));
+          parent.appendChild(em);
+          i = endEm + 1;
+          continue;
+        }
+      }
+      buf += s.charAt(i);
+      i += 1;
+    }
+    flush();
+  }
+  function headingOf(line) {
+    var t = trim(line);
+    if (t.indexOf('### ') === 0) return t.substring(4);
+    if (t.indexOf('## ') === 0) return t.substring(3);
+    if (t.indexOf('# ') === 0) return t.substring(2);
+    return '';
+  }
+  function listOf(line) {
+    var i = 0;
+    while (line.charAt(i) === ' ' || line.charAt(i) === '\t') i += 1;
+    var rest = line.substring(i);
+    if (rest.indexOf('- ') === 0 || rest.indexOf('* ') === 0) return { num: false, text: rest.substring(2) };
+    var j = 0;
+    while (rest.charAt(j) >= '0' && rest.charAt(j) <= '9') j += 1;
+    if (j > 0 && j <= 3 && rest.substring(j, j + 2) === '. ') return { num: true, text: rest.substring(j + 2) };
+    return null;
+  }
+  function renderLines(parent, text) {
+    var lines = String(text || '').split('\n');
+    var para = [];
+    var list = null;
+    function flushPara() {
+      if (!para.length) return;
+      var p = document.createElement('p');
+      renderInline(p, para.join('\n'));
+      parent.appendChild(p);
+      para = [];
+    }
+    function flushList() {
+      if (!list) return;
+      var el = document.createElement(list.num ? 'ol' : 'ul');
+      var n;
+      for (n = 0; n < list.items.length; n++) {
+        var li = document.createElement('li');
+        renderInline(li, list.items[n]);
+        el.appendChild(li);
+      }
+      parent.appendChild(el);
+      list = null;
+    }
+    var n;
+    for (n = 0; n < lines.length; n++) {
+      var line = lines[n];
+      if (!trim(line)) {
+        flushPara();
+        flushList();
+        continue;
+      }
+      var head = headingOf(line);
+      if (head) {
+        flushPara();
+        flushList();
+        var h = document.createElement('div');
+        h.className = 'mdh';
+        renderInline(h, head);
+        parent.appendChild(h);
+        continue;
+      }
+      var item = listOf(line);
+      if (item) {
+        flushPara();
+        if (!list || list.num !== item.num) {
+          flushList();
+          list = { num: item.num, items: [] };
+        }
+        list.items.push(item.text);
+        continue;
+      }
+      flushList();
+      para.push(line);
+    }
+    flushPara();
+    flushList();
+  }
+  function splitDisplay(src) {
+    var blocks = [];
+    var i = 0;
+    var buf = '';
+    while (i < src.length) {
+      var two = src.substring(i, i + 2);
+      var close = '';
+      if (two === '$$') close = '$$';
+      else if (two === '\\[') close = '\\]';
+      if (close) {
+        var end = src.indexOf(close, i + 2);
+        if (end > i) {
+          if (buf) blocks.push({ math: false, text: buf });
+          buf = '';
+          blocks.push({ math: true, text: src.substring(i + 2, end) });
+          i = end + close.length;
+          continue;
+        }
+      }
+      buf += src.charAt(i);
+      i += 1;
+    }
+    if (buf) blocks.push({ math: false, text: buf });
+    return blocks;
+  }
+  function renderProse(parent, text) {
+    var src = String(text || '');
+    var blocks = splitDisplay(src);
+    var i;
+    for (i = 0; i < blocks.length; i++) {
+      if (!blocks[i].math || i < 1 || blocks[i - 1].math || i + 1 >= blocks.length || blocks[i + 1].math) continue;
+      var next = blocks[i + 1].text;
+      var j = 0;
+      while (next.charAt(j) === ' ' || next.charAt(j) === '\n') j += 1;
+      var ch = next.charAt(j);
+      if (ch !== '.' && ch !== ',' && ch !== ';' && ch !== ':' && ch !== '!' && ch !== '?') continue;
+      blocks[i - 1].text = blocks[i - 1].text.replace(/\s+$/, '') + ch;
+      blocks[i + 1].text = next.substring(j + 1);
+    }
+    var b;
+    for (b = 0; b < blocks.length; b++) {
+      if (!trim(blocks[b].text)) continue;
+      if (blocks[b].math) appendMathRegion(parent, blocks[b].text, true);
+      else renderLines(parent, blocks[b].text);
+    }
+  }
+  function appendCode(node, raw) {
+    raw = String(raw || '');
+    var nl = raw.indexOf('\n');
+    var lang = nl >= 0 ? trim(raw.substring(0, nl)) : '';
+    var code = nl >= 0 && lang.length < 20 && lang.indexOf(' ') < 0 ? raw.substring(nl + 1) : raw;
+    if (code.charAt(code.length - 1) === '\n') code = code.substring(0, code.length - 1);
+    var wrap = document.createElement('div');
+    wrap.className = 'codewrap';
+    var bar = document.createElement('div');
+    bar.className = 'codebar';
+    var label = document.createElement('span');
+    label.className = 'codelang';
+    label.textContent = lang || 'code';
+    var copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = 'Copy';
+    copy.onclick = (function (text, button) {
+      return function () {
+        var area = document.createElement('textarea');
+        area.value = text;
+        document.body.appendChild(area);
+        if (area.select) area.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(area);
+        button.textContent = ok ? 'Copied' : 'Copy';
+      };
+    })(code, copy);
+    bar.appendChild(label);
+    bar.appendChild(copy);
+    var pre = document.createElement('pre');
+    pre.className = 'code';
+    pre.textContent = code;
+    wrap.appendChild(bar);
+    wrap.appendChild(pre);
+    node.appendChild(wrap);
+  }
   function fillAnswer(node, body) {
     var fence = String.fromCharCode(96, 96, 96);
     var parts = String(body || '').split(fence);
-    if (parts.length < 2) {
-      node.textContent = body;
-      return;
-    }
     while (node.firstChild) node.removeChild(node.firstChild);
-    for (var i = 0; i < parts.length; i++) {
+    var i;
+    for (i = 0; i < parts.length; i++) {
       if (i % 2 === 0) {
-        if (!parts[i]) continue;
+        if (!trim(parts[i])) continue;
         var prose = document.createElement('div');
         prose.className = 'prose';
-        prose.textContent = parts[i];
+        renderProse(prose, parts[i]);
         node.appendChild(prose);
-      } else {
-        var raw = parts[i];
-        var nl = raw.indexOf('\n');
-        var lang = nl >= 0 ? trim(raw.substring(0, nl)) : '';
-        var code = nl >= 0 && lang.length < 20 && lang.indexOf(' ') < 0 ? raw.substring(nl + 1) : raw;
-        if (code.charAt(code.length - 1) === '\n') code = code.substring(0, code.length - 1);
-        var wrap = document.createElement('div');
-        wrap.className = 'codewrap';
-        var bar = document.createElement('div');
-        bar.className = 'codebar';
-        var copy = document.createElement('button');
-        copy.type = 'button';
-        copy.textContent = 'Copy';
-        copy.onclick = (function (text, button) {
-          return function () {
-            var area = document.createElement('textarea');
-            area.value = text;
-            document.body.appendChild(area);
-            if (area.select) area.select();
-            var ok = false;
-            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-            document.body.removeChild(area);
-            button.textContent = ok ? 'Copied' : 'Copy';
-          };
-        })(code, copy);
-        bar.appendChild(copy);
-        var pre = document.createElement('pre');
-        pre.className = 'code';
-        pre.textContent = code;
-        wrap.appendChild(bar);
-        wrap.appendChild(pre);
-        node.appendChild(wrap);
-      }
+      } else appendCode(node, parts[i]);
     }
   }
 
@@ -1079,6 +1710,7 @@
         tools: tools,
         history: history,
         handAfter: !!handAfter,
+        think: !!(turn && turn.think),
         user: asked
       }));
     } catch (e2) {}
@@ -1165,8 +1797,8 @@
     postJson('/v1/chat/completions', {
       messages: planMessages,
       stream: false,
-      max_tokens: planCap(),
-      chat_template_kwargs: { enable_thinking: false }
+      max_tokens: (turn && turn.think) ? Math.max(planCap(), 768) : planCap(),
+      chat_template_kwargs: { enable_thinking: !!(turn && turn.think) }
     }, function (status, data) {
       if (!turn || turn.cancelled) return finishStop(holder, '');
       var msg = data && data.choices && data.choices[0] && data.choices[0].message;
@@ -1226,7 +1858,7 @@
     if (saved.history && saved.history.length) history = saved.history;
     asked = saved.user || '';
     var holder = openBubbles(asked || 'Continuing the agent hand off.');
-    turn = { cancelled: false };
+    turn = { cancelled: false, think: !!saved.think };
     busy(true);
     var slot = addTool(holder.tools, 'Agent', 'Waiting for the model. The console keeps one model on the GPU.', false);
     waitLoaded(saved.path, 90, function (error) {
@@ -1260,7 +1892,7 @@
     asked = text;
     var kind = classify(text);
     referenceTurn = false;
-    turn = { cancelled: false };
+    turn = { cancelled: false, think: !!thinkOn };
     busy(true);
 
     var math = mathNote(text);
@@ -1425,9 +2057,13 @@
               if (!window.confirm('Load ' + label + '? The console restarts.')) return;
               b.disabled = true;
               status.textContent = 'Restarting with ' + label + '.';
+              beginLoad(label, 'load');
               panelSend('POST', '/load', { path: m.file }, function (c, d) {
                 status.textContent = (d && (d.note || d.error)) || 'Load failed';
-                if (!(d && d.ok)) b.disabled = false;
+                if (!(d && d.ok)) {
+                  b.disabled = false;
+                  cancelLoad();
+                }
               });
             };
             list.appendChild(b);
@@ -1633,10 +2269,147 @@
     mark(gpu, Number(c.gpu) || 0);
     mark(cpu, Number(c.cpu) || 0);
   }
+  var loadWatch = null;
+  var loadSawDown = false;
+  var loadState = '';
+  var sawModel = null;
+  function prettyModel(name) {
+    var s = String(name || '');
+    var slash = s.lastIndexOf('/');
+    if (slash >= 0) s = s.substring(slash + 1);
+    if (s.length > 5 && s.substring(s.length - 5).toLowerCase() === '.gguf') s = s.substring(0, s.length - 5);
+    return s.replace(/-/g, ' ');
+  }
+  function libraryOpen() {
+    var view = document.getElementById('view-library');
+    return !!(view && view.className.indexOf('off') < 0);
+  }
+  function beginLoad(name, kind) {
+    loadWatch = { name: name || 'this model', kind: kind || 'load', path: loadedPath || '' };
+    loadSawDown = false;
+    showRestart();
+  }
+  function cancelLoad() {
+    loadWatch = null;
+    loadSawDown = false;
+    var box = document.getElementById('load-widget');
+    if (box) box.className = 'widget off';
+  }
+  function showRestart() {
+    var box = document.getElementById('load-widget');
+    if (!box) return;
+    box.className = 'widget';
+    var unloading = loadWatch && loadWatch.kind === 'unload';
+    document.getElementById('load-title').textContent = unloading ? 'Unloading' : 'Loading';
+    document.getElementById('load-pct').textContent = '';
+    document.getElementById('load-note').textContent = unloading
+      ? 'The console is restarting without a model.'
+      : 'The console is restarting with ' + (loadWatch && loadWatch.name ? loadWatch.name : 'this model') + '.';
+    document.getElementById('load-bar').className = 'bar busy';
+    document.getElementById('load-fill').style.width = '';
+    var status = document.getElementById('lib-status');
+    if (status) status.textContent = document.getElementById('load-note').textContent;
+  }
+  function showProgress(c) {
+    var box = document.getElementById('load-widget');
+    if (!box) return;
+    box.className = 'widget';
+    var name = prettyModel((c && c.model) || (loadWatch && loadWatch.name) || '');
+    document.getElementById('load-title').textContent = 'Loading' + (name ? ' ' + name : '');
+    var modelEl = document.getElementById('model');
+    if (modelEl && name) modelEl.textContent = 'Loading ' + name;
+    var p = c ? Number(c.load) : -1;
+    var known = p >= 0;
+    var pct = known ? Math.round(p * 100) : 0;
+    if (pct > 99) pct = 99;
+    document.getElementById('load-pct').textContent = known ? (pct + '% on the GPU') : '';
+    var bar = document.getElementById('load-bar');
+    var fill = document.getElementById('load-fill');
+    if (!known) {
+      bar.className = 'bar busy';
+      fill.style.width = '';
+    } else {
+      bar.className = 'bar';
+      fill.style.width = pct + '%';
+    }
+    var note = c && c.phase ? c.phase : (known && p < 0.985 ? 'Copying the weights into GPU memory' : 'Preparing the context');
+    var total = c ? (Number(c.model_gib) || 0) + (Number(c.kv_gib) || 0) : 0;
+    if (known && total > 0) note += '. ' + oneGb(p * total) + ' of ' + oneGb(total) + ' GB';
+    document.getElementById('load-note').textContent = note;
+    var lib = document.getElementById('lib-status');
+    if (lib) lib.textContent = note;
+  }
+  function noteModel(data) {
+    if (!data) return;
+    var path = typeof data.loaded === 'string' ? data.loaded : '';
+    var c = data.console || {};
+    if (path) {
+      loadedPath = path;
+      var pretty = prettyModel(c.model || path);
+      var modelEl = document.getElementById('model');
+      if (modelEl && pretty && modelEl.textContent !== pretty) modelEl.textContent = pretty;
+      if (modelReady !== true) {
+        modelReady = true;
+        var empty = document.getElementById('empty');
+        if (empty && empty.getAttribute('data-idle')) paintAsk(empty);
+      }
+      sawModel = true;
+    } else if (data.loaded === null && sawModel === true) {
+      modelReady = false;
+      sawModel = false;
+      var modelEl2 = document.getElementById('model');
+      if (modelEl2) modelEl2.textContent = 'No model loaded';
+      var empty2 = document.getElementById('empty');
+      if (empty2 && !turn) showNoModel();
+    } else if (data.loaded === null) {
+      sawModel = false;
+    }
+  }
+  function paintLoad(data) {
+    var c = data && data.console ? data.console : null;
+    var state = c && c.state ? c.state : '';
+    if (!data) {
+      if (loadWatch) {
+        loadSawDown = true;
+        showRestart();
+      }
+      return;
+    }
+    if (state === 'loading') {
+      if (!loadWatch) loadWatch = { name: c.model || 'the model', kind: 'load', path: loadedPath || '' };
+      showProgress(c);
+      loadState = state;
+      return;
+    }
+    var path = typeof data.loaded === 'string' ? data.loaded : '';
+    if (loadWatch) {
+      var changed = path !== (loadWatch.path || '');
+      if (!loadSawDown && !changed && state !== 'failed') {
+        showRestart();
+        loadState = state;
+        return;
+      }
+      loadWatch = null;
+      loadSawDown = false;
+      var box = document.getElementById('load-widget');
+      if (box) box.className = 'widget off';
+      if (libraryOpen()) loadLibrary();
+    } else if (loadState === 'loading' && libraryOpen()) {
+      loadLibrary();
+    }
+    loadState = state;
+  }
   function pollUsage() {
     panelSend('GET', '/artemis', null, function (code, data) {
-      if (data && typeof data.loaded === 'string') loadedPath = data.loaded;
+      if (!data) {
+        paintUsage(null);
+        paintLoad(null);
+        return;
+      }
+      if (typeof data.loaded === 'string') loadedPath = data.loaded;
       paintUsage(data);
+      noteModel(data);
+      paintLoad(data);
     });
   }
   pollUsage();
@@ -1768,9 +2541,13 @@
               if (!window.confirm('Load ' + (m.label || 'this model') + '? The console restarts.')) return;
               load.disabled = true;
               status.textContent = 'Restarting with ' + (m.label || 'the model') + '.';
+              beginLoad(m.label || 'this model', 'load');
               panelSend('POST', '/load', { path: m.file }, function (c, d) {
                 status.textContent = (d && (d.note || d.error)) || 'Load failed';
-                if (!(d && d.ok)) load.disabled = false;
+                if (!(d && d.ok)) {
+                  load.disabled = false;
+                  cancelLoad();
+                }
               });
             };
             buttons.appendChild(load);
@@ -1783,9 +2560,13 @@
               if (!window.confirm('Unload the model? The console restarts.')) return;
               unload.disabled = true;
               status.textContent = 'Restarting with no model.';
+              beginLoad('no model', 'unload');
               panelSend('POST', '/unload', {}, function (c, d) {
                 status.textContent = (d && (d.note || d.error)) || 'Unload failed';
-                if (!(d && d.ok)) unload.disabled = false;
+                if (!(d && d.ok)) {
+                  unload.disabled = false;
+                  cancelLoad();
+                }
               });
             };
             buttons.appendChild(unload);
@@ -1971,8 +2752,10 @@
           toolOn.files = box.checked;
           toolOn.notes = box.checked;
         }
-        paintTools();
       }
+      if (key === 'web_search') toolOn.search = box.checked;
+      if (key === 'datetime') toolOn.clock = box.checked;
+      if (key === 'tools' || key === 'web_search' || key === 'datetime') paintTools();
       saveSetting(body);
     };
     wrap.appendChild(box);
@@ -1985,40 +2768,97 @@
       status.textContent = data && data.ok ? 'Saved. A loaded model keeps context, cache, attention, batch, slots, memory, and sampling until the next load.' : ((data && data.error) || 'Could not save');
     });
   }
-  var updateTimer = 0;
-  var updateTries = 0;
-  var updateSeen = false;
-  function paintUpdate() {
-    if (updateTimer) {
-      clearTimeout(updateTimer);
-      updateTimer = 0;
+  var updateHold = null;
+  function updateFraction(status, installing) {
+    var s = String(status || '');
+    if (s.indexOf('Installed ') === 0) return 1;
+    if (s.indexOf('Installing ') === 0) return 0.96;
+    if (s.indexOf('Unpacking ') === 0) return 0.9;
+    if (s.indexOf('Checking the checksum') === 0) return 0.84;
+    if (s.indexOf('Downloading ') === 0) return -1;
+    if (installing && s.indexOf('Checking GitHub') === 0) return 0.05;
+    return -1;
+  }
+  function updateLive(data) {
+    if (!data) return false;
+    if (data.installing || data.ready || data.held) return true;
+    var s = String(data.status || '');
+    if (!s || s.indexOf('Checking GitHub') === 0) return false;
+    if (s.indexOf('This is ') === 0) return false;
+    return true;
+  }
+  function paintUpdateWidget(data) {
+    var box = document.getElementById('upd-widget');
+    if (!box) return;
+    if (!updateLive(data)) {
+      box.className = 'widget off';
+      return;
     }
-    var line = document.getElementById('upd-status');
-    var go = document.getElementById('upd-go');
-    if (!line) return;
+    box.className = 'widget';
+    var status = data.status || 'Checking GitHub.';
+    var version = data.latest ? (' ' + data.latest) : '';
+    document.getElementById('upd-widget-title').textContent = data.installing ? ('Installing' + version) : (data.ready ? ('Update' + version) : 'Update');
+    document.getElementById('upd-widget-note').textContent = status;
+    var frac = data.held ? 1 : updateFraction(status, data.installing);
+    var bar = document.getElementById('upd-bar');
+    var fill = document.getElementById('upd-fill');
+    var pct = document.getElementById('upd-pct');
+    if (frac < 0) {
+      bar.className = 'bar busy';
+      fill.style.width = '';
+      pct.textContent = '';
+    } else {
+      bar.className = 'bar';
+      var shown = Math.round(frac * 100);
+      fill.style.width = shown + '%';
+      pct.textContent = shown + '%';
+    }
+    var go = document.getElementById('upd-widget-go');
+    if (go) {
+      var offer = !!data.ready && !data.installing && !data.held;
+      go.style.display = offer ? '' : 'none';
+      go.disabled = !offer;
+    }
+  }
+  function paintUpdate() {
     panelSend('GET', '/update', null, function (code, data) {
-      if (!document.getElementById('upd-status')) return;
+      var line = document.getElementById('upd-status');
+      var go = document.getElementById('upd-go');
       if (!data) {
-        line.textContent = 'Could not ask about updates.';
+        if (updateHold && (updateHold.installing || String(updateHold.status || '').indexOf('Installed ') === 0)) {
+          paintUpdateWidget({
+            status: 'The console is restarting. Open ArtemisLM again from the home screen.',
+            installing: false,
+            ready: false,
+            held: true
+          });
+        }
+        if (line) line.textContent = 'Could not ask about updates.';
         if (go) go.disabled = false;
         return;
       }
-      line.textContent = data.status || 'Checking GitHub.';
+      updateHold = data;
+      if (line) line.textContent = data.status || 'Checking GitHub.';
       if (go) {
         go.disabled = !!data.installing;
         go.textContent = data.installing ? 'Installing...' : (data.ready ? 'Install the update' : 'Check GitHub');
       }
-      var keep = false;
-      if (data.installing) {
-        updateSeen = true;
-        keep = true;
-      } else if (!updateSeen && updateTries > 0) {
-        updateTries -= 1;
-        keep = true;
-      }
-      if (keep) updateTimer = setTimeout(paintUpdate, 1500);
+      paintUpdateWidget(data);
     });
   }
+  paintUpdate();
+  setInterval(paintUpdate, 2000);
+  document.getElementById('upd-widget-go').onclick = function () {
+    var go = document.getElementById('upd-widget-go');
+    go.disabled = true;
+    panelSend('POST', '/update', { install: true }, function (c, d) {
+      if (d && d.status) {
+        var note = document.getElementById('upd-widget-note');
+        if (note) note.textContent = d.status;
+      }
+      paintUpdate();
+    });
+  };
   var dlSeen = 0;
   var dlReady = false;
   var dlTimer = 0;
@@ -2047,7 +2887,7 @@
       for (i = 0; i < rows.length; i++) {
         var d = rows[i];
         if (d.state === 'done') done += 1;
-        else live += 1;
+        else if (d.state !== 'failed') live += 1;
         var card = document.createElement('div');
         card.className = 'card';
         var title = document.createElement('h2');
@@ -2067,9 +2907,42 @@
         dlSeen = done;
       }
       dlReady = true;
-      if (live) dlTimer = setTimeout(pollDownloads, 1000);
+      paintDownloadWidget(rows);
+      dlTimer = setTimeout(pollDownloads, live ? 1000 : 2000);
     });
   }
+  function paintDownloadWidget(rows) {
+    var box = document.getElementById('dl-widget');
+    if (!box) return;
+    var live = null;
+    var i;
+    for (i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      if (row && row.state !== 'done' && row.state !== 'failed') {
+        live = row;
+        break;
+      }
+    }
+    if (!live) {
+      box.className = 'widget off';
+      return;
+    }
+    box.className = 'widget';
+    document.getElementById('dl-title').textContent = live.file || 'Download';
+    var pct = live.bytes ? Math.floor(live.done * 100 / live.bytes) : -1;
+    document.getElementById('dl-pct').textContent = pct >= 0 ? (pct + '%') : '';
+    var bar = document.getElementById('dl-bar');
+    var fill = document.getElementById('dl-fill');
+    if (pct < 0) {
+      bar.className = 'bar busy';
+      fill.style.width = '';
+    } else {
+      bar.className = 'bar';
+      fill.style.width = pct + '%';
+    }
+    document.getElementById('dl-note').textContent = downloadLine(live);
+  }
+  pollDownloads();
   function setupSentence(data) {
     var mem = data.memory === 'tight' ? 'Tight spare' : data.memory === 'roomy' ? 'More spare' : data.memory === 'spill' ? 'Spill to RAM' : 'Measured spare';
     var fa = data.flash_attn === 'off' ? 'flash attention off' : data.flash_attn === 'auto' ? 'flash attention automatic' : 'flash attention on';
@@ -2287,15 +3160,14 @@
       ['reference', 'Reference tables', 'Reference', 'Units, dates, constants, and status codes']
     ];
   }
-  function toolRowOn(key) {
-    if ((key === 'projects' || key === 'files' || key === 'notes') && !fileToolsOn) return false;
-    return !!toolOn[key];
-  }
-  function toolCount() {
-    var rows = toolRows();
-    var n = 0;
-    for (var i = 0; i < rows.length; i++) if (toolRowOn(rows[i][0])) n += 1;
-    return n;
+  function applyTool(key, on) {
+    var blocked = (key === 'projects' || key === 'files' || key === 'notes') && !fileToolsOn;
+    if (blocked) return;
+    toolTouched = true;
+    toolOn[key] = !!on;
+    if (key === 'search') saveSetting({ web_search: !!on });
+    if (key === 'clock') saveSetting({ datetime: !!on });
+    paintTools();
   }
   function paintPills() {
     var box = document.getElementById('tool-pills');
@@ -2303,17 +3175,25 @@
     while (box.firstChild) box.removeChild(box.firstChild);
     var rows = toolRows();
     for (var i = 0; i < rows.length; i++) {
-      if (!toolRowOn(rows[i][0])) continue;
-      var pill = document.createElement('span');
-      pill.className = 'pill';
-      pill.textContent = rows[i][2];
-      box.appendChild(pill);
+      (function (row) {
+        var key = row[0];
+        var blocked = (key === 'projects' || key === 'files' || key === 'notes') && !fileToolsOn;
+        var on = !blocked && !!toolOn[key];
+        var pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = on ? 'pill on' : 'pill';
+        pill.textContent = row[2];
+        pill.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (blocked) pill.disabled = true;
+        pill.onclick = function () { applyTool(key, !toolOn[key]); };
+        box.appendChild(pill);
+      })(rows[i]);
     }
   }
   function paintTools() {
     var panel = document.getElementById('tool-panel');
     var toggle = document.getElementById('tool-toggle');
-    if (toggle) toggle.textContent = 'Tools ' + toolCount();
+    if (toggle) toggle.textContent = 'Tools';
     paintPills();
     if (!panel) return;
     while (panel.firstChild) panel.removeChild(panel.firstChild);
@@ -2336,10 +3216,7 @@
           box.checked = false;
         }
         box.onchange = function () {
-          toolTouched = true;
-          toolOn[key] = box.checked;
-          if (toggle) toggle.textContent = 'Tools ' + toolCount();
-          paintPills();
+          applyTool(key, box.checked);
         };
         var copy = document.createElement('span');
         copy.className = 'tool-copy';
@@ -2440,11 +3317,43 @@
           open.type = 'button';
           open.textContent = 'Files';
           open.onclick = function () { loadProjectFiles(p.name); };
+          var run = document.createElement('button');
+          run.type = 'button';
+          run.textContent = p.kind === 'static-page' ? 'Run' : 'Check';
+          run.onclick = function () { runProject(p.name); };
           row.appendChild(title);
           row.appendChild(meta);
+          row.appendChild(run);
           row.appendChild(open);
           if (list) list.appendChild(row);
         })(projects[i]);
+      }
+    });
+  }
+  function runProject(name) {
+    var status = document.getElementById('proj-status');
+    var view = document.getElementById('proj-view');
+    if (status) status.textContent = 'Checking ' + name + '\u2026';
+    if (view) view.textContent = '';
+    hidePreview();
+    panelSend('POST', '/project', { tool: 'build', name: name }, function (code, data) {
+      if (!data || data.error) {
+        if (status) status.textContent = (data && data.error) || 'The check did not answer.';
+        return;
+      }
+      var lines = [];
+      if (data.errors && data.errors.length) {
+        var i;
+        for (i = 0; i < data.errors.length; i++) lines.push(data.errors[i]);
+      }
+      if (status) status.textContent = data.ok ? (data.note || 'Checked.') : 'Check found errors.';
+      if (view) view.textContent = data.ok ? (data.note || '') : lines.join('\n');
+      if (typeof data.page === 'string' && data.page) {
+        var frame = document.getElementById('proj-preview');
+        if (frame) {
+          frame.className = 'preview';
+          try { frame.srcdoc = data.page; } catch (e2) { frame.className = 'preview off'; }
+        }
       }
     });
   }
@@ -2509,6 +3418,12 @@
     inputFile.value = '';
   };
   document.getElementById('new-chat').onclick = newChat;
+  document.getElementById('think-btn').onclick = function () {
+    thinkOn = !thinkOn;
+    var btn = document.getElementById('think-btn');
+    btn.className = thinkOn ? 'ghost on' : 'ghost';
+    btn.setAttribute('aria-pressed', thinkOn ? 'true' : 'false');
+  };
   document.getElementById('proj-ask').onclick = askProject;
   if (document.addEventListener) {
     document.addEventListener('click', function (e) {

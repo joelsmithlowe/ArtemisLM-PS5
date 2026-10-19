@@ -61,8 +61,13 @@ struct ConsoleReading {
     double pool_gib = 0, free_gib = 0, heap_gib = 0;
     double vram_gib = 0, vram_free_gib = 0;
     double host_gib = 0, host_free_gib = 0;
+    double model_gib = 0, kv_gib = 0;
     float  gpu = 0, cpu = 0;
+    float  load = -1;
     float  soc_temp = -1000, cpu_temp = -1000, power_w = 0, fan = -1;
+    std::string state;
+    std::string phase;
+    std::string model;
 };
 ConsoleReading g_console;
 std::atomic<int> g_gen{ 0 };
@@ -286,7 +291,13 @@ std::string artemis_json() {
                        { "soc_temp", console.soc_temp },
                        { "cpu_temp", console.cpu_temp },
                        { "power_w", console.power_w },
-                       { "fan", console.fan } } },
+                       { "fan", console.fan },
+                       { "state", console.state },
+                       { "load", console.load },
+                       { "phase", console.phase },
+                       { "model", console.model },
+                       { "model_gib", console.model_gib },
+                       { "kv_gib", console.kv_gib } } },
     };
     if (!ip.empty()) {
         out["chat"] = std::string("http://") + ip + ":" + std::to_string(kChatPort) + "/v1";
@@ -1465,7 +1476,26 @@ void panel_set_fault(const std::string & text) {
     g_fault = text;
 }
 
+const char * console_state(ServerState state) {
+    switch (state) {
+    case ServerState::loading:    return "loading";
+    case ServerState::generating: return "generating";
+    case ServerState::failed:     return "failed";
+    case ServerState::no_model:   return "no_model";
+    case ServerState::ready:      return "ready";
+    }
+    return "ready";
+}
+
 void panel_set_console(const Live & live) {
+    std::string model = live.model_label;
+    if (model.empty()) {
+        model = live.model_file;
+    }
+    const auto slash = model.find_last_of('/');
+    if (slash != std::string::npos) {
+        model = model.substr(slash + 1);
+    }
     std::lock_guard<std::mutex> lock(g_mu);
     g_console.pool_gib = live.pool_gib;
     g_console.free_gib = live.free_gib;
@@ -1474,12 +1504,18 @@ void panel_set_console(const Live & live) {
     g_console.vram_free_gib = live.vram_free_gib;
     g_console.host_gib = live.host_gib;
     g_console.host_free_gib = live.host_free_gib;
+    g_console.model_gib = live.model_gib;
+    g_console.kv_gib = live.kv_gib;
     g_console.gpu = live.gpu_busy;
     g_console.cpu = live.cpu_use;
+    g_console.load = live.load_progress;
     g_console.soc_temp = live.soc_temp;
     g_console.cpu_temp = live.cpu_temp;
     g_console.power_w = live.soc_power_w;
     g_console.fan = live.fan;
+    g_console.state = console_state(live.state);
+    g_console.phase = live.phase;
+    g_console.model = std::move(model);
 }
 
 int panel_generation() { return g_gen.load(); }

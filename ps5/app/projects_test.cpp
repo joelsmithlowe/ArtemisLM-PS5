@@ -178,6 +178,62 @@ void test_round_trip(const std::string & root) {
     expect(has_error(call(root, { { "tool", "write" }, { "name", "many" }, { "path", "over.txt" }, { "text", "x" } })), "file 41");
 }
 
+void test_build(const std::string & root) {
+    const auto page = call(root, { { "tool", "build" }, { "name", "site" } });
+    expect(page.value("ok", false), "build page");
+    const std::string html = page.value("page", std::string());
+    expect(html.find("font-family: sans-serif") != std::string::npos, "inlined css");
+    expect(html.find("document.title") != std::string::npos, "inlined script");
+    expect(html.find("href=\"style.css\"") == std::string::npos, "css link replaced");
+    const std::string note = page.value("note", std::string());
+    expect(note.find("preview") != std::string::npos, "preview note");
+    expect(note.find("cannot start Node or Python") != std::string::npos, "build honest");
+
+    const auto node = call(root, { { "tool", "build" }, { "name", "hello" } });
+    expect(node.value("ok", false), "build node");
+    expect(node.value("page", std::string()).empty(), "node has no page");
+    const std::string node_note = node.value("note", std::string());
+    expect(node_note.find("cannot start Node or Python") != std::string::npos, "node build honest");
+    expect(node_note.find("run node server.js") != std::string::npos, "node build command");
+
+    expect(call(root, { { "tool", "create" }, { "name", "gap" }, { "kind", "static-page" } }).value("ok", false), "gap create");
+    const char * gap_html = "<!DOCTYPE html>\n<html><body>\n<link rel=\"stylesheet\" href=\"gone.css\">\n</body></html>\n";
+    expect(call(root, { { "tool", "write" }, { "name", "gap" }, { "path", "index.html" }, { "text", gap_html } }).value("ok", false), "gap write");
+    const auto gap = call(root, { { "tool", "review" }, { "name", "gap" } });
+    expect(!gap.value("ok", true), "missing css fails");
+    bool says = false;
+    if (gap["errors"].is_array()) {
+        for (const auto & err : gap["errors"]) {
+            if (err.is_string() && err.get<std::string>().find("links to missing gone.css") != std::string::npos) {
+                says = true;
+            }
+        }
+    }
+    expect(says, "missing css message");
+    const auto gap_build = call(root, { { "tool", "build" }, { "name", "gap" } });
+    expect(!gap_build.value("ok", true), "build missing css");
+    expect(gap_build.value("page", std::string()).empty(), "no preview when broken");
+
+    expect(call(root, { { "tool", "create" }, { "name", "req" }, { "kind", "node-server" } }).value("ok", false), "req create");
+    const char * req_js =
+        "var http = require(\"http\");\n"
+        "var extra = require(\"./missing.js\");\n"
+        "var server = http.createServer(function (req, res) { res.end(\"ok\\n\"); });\n"
+        "server.listen(8080);\n";
+    expect(call(root, { { "tool", "write" }, { "name", "req" }, { "path", "server.js" }, { "text", req_js } }).value("ok", false), "req write");
+    const auto req = call(root, { { "tool", "review" }, { "name", "req" } });
+    expect(!req.value("ok", true), "missing require fails");
+    bool needs = false;
+    if (req["errors"].is_array()) {
+        for (const auto & err : req["errors"]) {
+            if (err.is_string() && err.get<std::string>().find("needs missing.js") != std::string::npos) {
+                needs = true;
+            }
+        }
+    }
+    expect(needs, "missing require message");
+}
+
 void test_remove(const std::string & root) {
     expect(call(root, { { "tool", "create" }, { "name", "rm" }, { "kind", "python" } }).value("ok", false), "rm create");
     expect(call(root, { { "tool", "write" }, { "name", "rm" }, { "path", "note.txt" }, { "text", "gone" } }).value("ok", false), "rm write");
@@ -202,6 +258,7 @@ int main() {
     test_kinds(root);
     test_review_errors(root);
     test_round_trip(root);
+    test_build(root);
     test_remove(root);
     std::filesystem::remove_all(root);
     if (fails) {

@@ -611,39 +611,461 @@ std::string do_write(const std::string & root, const std::string & name, const s
     return nlohmann::json{ { "ok", true }, { "name", name }, { "path", rel }, { "bytes", text.size() } }.dump();
 }
 
-std::string do_review(const std::string & root, const std::string & name) {
+struct ReviewedFile {
+    std::string rel;
+    std::string text;
+    SourceScan scan;
+};
+
+struct Review {
+    std::string fail;
+    std::string kind;
+    std::string main_file = "server.js";
+    nlohmann::json files = nlohmann::json::array();
+    std::vector<std::string> errors;
+    std::vector<ReviewedFile> scanned;
+
+    const ReviewedFile * find(const std::string & rel) const {
+        for (const auto & one : scanned) {
+            if (one.rel == rel) {
+                return &one;
+            }
+        }
+        return nullptr;
+    }
+};
+
+std::string lower_copy(std::string text) {
+    for (char & c : text) {
+        c = (char) std::tolower((unsigned char) c);
+    }
+    return text;
+}
+
+std::string attr_value(const std::string & tag, const char * key) {
+    const std::string low = lower_copy(tag);
+    const size_t key_n = std::strlen(key);
+    size_t at = 0;
+    while (at < low.size()) {
+        const size_t found = low.find(key, at);
+        if (found == std::string::npos) {
+            return {};
+        }
+        if (found > 0) {
+            const unsigned char prev = (unsigned char) low[found - 1];
+            if (std::isalnum(prev) || low[found - 1] == '-' || low[found - 1] == '_') {
+                at = found + 1;
+                continue;
+            }
+        }
+        size_t p = found + key_n;
+        while (p < low.size() && std::isspace((unsigned char) low[p])) {
+            p++;
+        }
+        if (p >= low.size() || low[p] != '=') {
+            at = found + 1;
+            continue;
+        }
+        p++;
+        while (p < tag.size() && std::isspace((unsigned char) tag[p])) {
+            p++;
+        }
+        if (p >= tag.size()) {
+            return {};
+        }
+        const char quote = tag[p];
+        if (quote == '"' || quote == '\'') {
+            const size_t end = tag.find(quote, p + 1);
+            if (end == std::string::npos) {
+                return {};
+            }
+            return tag.substr(p + 1, end - p - 1);
+        }
+        size_t end = p;
+        while (end < tag.size() && !std::isspace((unsigned char) tag[end]) && tag[end] != '>') {
+            end++;
+        }
+        return tag.substr(p, end - p);
+    }
+    return {};
+}
+
+struct HtmlTag {
+    size_t begin = 0;
+    size_t end = 0;
+    std::string name;
+    std::string href;
+    std::string src;
+    std::string rel;
+};
+
+std::vector<HtmlTag> find_tags(const std::string & html) {
+    std::vector<HtmlTag> out;
+    for (size_t i = 0; i < html.size();) {
+        if (html[i] != '<') {
+            i++;
+            continue;
+        }
+        if (i + 3 < html.size() && html.compare(i, 4, "<!--") == 0) {
+            const size_t end = html.find("-->", i + 4);
+            i = end == std::string::npos ? html.size() : end + 3;
+            continue;
+        }
+        if (i + 1 < html.size() && (html[i + 1] == '/' || html[i + 1] == '!')) {
+            i++;
+            continue;
+        }
+        size_t j = i + 1;
+        while (j < html.size() && std::isalpha((unsigned char) html[j])) {
+            j++;
+        }
+        if (j == i + 1) {
+            i++;
+            continue;
+        }
+        const std::string name = lower_copy(html.substr(i + 1, j - i - 1));
+        bool in_single = false;
+        bool in_double = false;
+        size_t k = j;
+        for (; k < html.size(); k++) {
+            const char c = html[k];
+            if (in_single) {
+                if (c == '\'') {
+                    in_single = false;
+                }
+                continue;
+            }
+            if (in_double) {
+                if (c == '"') {
+                    in_double = false;
+                }
+                continue;
+            }
+            if (c == '\'') {
+                in_single = true;
+                continue;
+            }
+            if (c == '"') {
+                in_double = true;
+                continue;
+            }
+            if (c == '>') {
+                break;
+            }
+        }
+        if (k >= html.size()) {
+            break;
+        }
+        HtmlTag tag;
+        tag.begin = i;
+        tag.end = k + 1;
+        tag.name = name;
+        if (name == "link" || name == "script" || name == "img") {
+            const std::string raw = html.substr(i, tag.end - i);
+            tag.href = attr_value(raw, "href");
+            tag.src = attr_value(raw, "src");
+            tag.rel = attr_value(raw, "rel");
+            out.push_back(tag);
+        }
+        i = tag.end;
+    }
+    return out;
+}
+
+// A project-relative file. Remote, root, and hash links are left alone.
+std::string project_rel(std::string url) {
+    const size_t hash = url.find('#');
+    if (hash != std::string::npos) {
+        url = url.substr(0, hash);
+    }
+    const size_t query = url.find('?');
+    if (query != std::string::npos) {
+        url = url.substr(0, query);
+    }
+    if (url.empty() || url.find("://") != std::string::npos) {
+        return {};
+    }
+    if (url.rfind("//", 0) == 0 || url[0] == '/' || url[0] == '#') {
+        return {};
+    }
+    if (url.rfind("data:", 0) == 0 || url.rfind("mailto:", 0) == 0) {
+        return {};
+    }
+    if (url.rfind("./", 0) == 0) {
+        url = url.substr(2);
+    }
+    return url;
+}
+
+std::string import_rel(const std::string & spec) {
+    if (spec.empty()) {
+        return {};
+    }
+    const bool local = spec.rfind("./", 0) == 0 || spec.rfind("../", 0) == 0 || spec.find('/') != std::string::npos
+        || ends_with(spec, ".js") || ends_with(spec, ".mjs") || ends_with(spec, ".cjs") || ends_with(spec, ".json")
+        || ends_with(spec, ".py") || ends_with(spec, ".txt") || ends_with(spec, ".css") || ends_with(spec, ".html");
+    if (!local) {
+        return {};
+    }
+    if (spec.rfind("./", 0) == 0) {
+        return spec.substr(2);
+    }
+    return spec;
+}
+
+bool line_comment_at(const std::string & text, size_t i) {
+    const size_t line = text.rfind('\n', i == 0 ? 0 : i - 1);
+    size_t start = line == std::string::npos ? 0 : line + 1;
+    while (start < text.size() && std::isspace((unsigned char) text[start])) {
+        start++;
+    }
+    if (start < text.size() && text[start] == '#') {
+        return true;
+    }
+    return start + 1 < text.size() && text[start] == '/' && text[start + 1] == '/';
+}
+
+template <typename Fn>
+void each_quoted_call(const std::string & text, const char * name, Fn fn) {
+    const size_t n = std::strlen(name);
+    for (size_t i = 0; i + n < text.size();) {
+        if (text.compare(i, n, name) != 0) {
+            i++;
+            continue;
+        }
+        if (i > 0) {
+            const unsigned char prev = (unsigned char) text[i - 1];
+            if (std::isalnum(prev) || text[i - 1] == '_' || text[i - 1] == '$' || text[i - 1] == '.') {
+                i++;
+                continue;
+            }
+        }
+        if (line_comment_at(text, i)) {
+            i += n;
+            continue;
+        }
+        size_t p = i + n;
+        while (p < text.size() && std::isspace((unsigned char) text[p])) {
+            p++;
+        }
+        if (p >= text.size() || text[p] != '(') {
+            i++;
+            continue;
+        }
+        p++;
+        while (p < text.size() && std::isspace((unsigned char) text[p])) {
+            p++;
+        }
+        if (p >= text.size() || (text[p] != '"' && text[p] != '\'')) {
+            i = p;
+            continue;
+        }
+        const char quote = text[p++];
+        std::string spec;
+        bool esc = false;
+        for (; p < text.size(); p++) {
+            const char c = text[p];
+            if (esc) {
+                spec.push_back(c);
+                esc = false;
+                continue;
+            }
+            if (c == '\\') {
+                esc = true;
+                continue;
+            }
+            if (c == quote) {
+                break;
+            }
+            spec.push_back(c);
+        }
+        fn(spec);
+        i = p < text.size() ? p + 1 : p;
+    }
+}
+
+void note_missing(Review & review, const std::string & file, const std::string & spec, const char * verb) {
+    const std::string rel = import_rel(spec);
+    if (rel.empty()) {
+        return;
+    }
+    if (!path_ok(rel)) {
+        push_error(review.errors, file + " " + verb + " a file outside this project");
+        return;
+    }
+    if (!review.find(rel)) {
+        push_error(review.errors, file + " " + verb + " " + rel);
+    }
+}
+
+void check_local_refs(Review & review) {
+    for (const auto & file : review.scanned) {
+        if (is_js(file.rel)) {
+            each_quoted_call(file.text, "require", [&](const std::string & spec) {
+                note_missing(review, file.rel, spec, "needs");
+            });
+        } else if (ends_with(file.rel, ".py")) {
+            each_quoted_call(file.text, "open", [&](const std::string & spec) {
+                note_missing(review, file.rel, spec, "opens");
+            });
+        }
+    }
+    if (review.kind != "static-page") {
+        return;
+    }
+    const ReviewedFile * page = review.find("index.html");
+    if (!page) {
+        return;
+    }
+    for (const HtmlTag & tag : find_tags(page->text)) {
+        std::string url;
+        if (tag.name == "link") {
+            url = tag.href;
+            const std::string rel = lower_copy(tag.rel);
+            const bool sheet = rel.find("stylesheet") != std::string::npos || ends_with(lower_copy(url), ".css");
+            if (!sheet) {
+                continue;
+            }
+        } else if (tag.name == "script") {
+            url = tag.src;
+            if (url.empty()) {
+                continue;
+            }
+        } else {
+            continue;
+        }
+        const std::string rel = project_rel(url);
+        if (rel.empty()) {
+            continue;
+        }
+        if (!path_ok(rel)) {
+            push_error(review.errors, "index.html links to a file outside this project");
+            continue;
+        }
+        if (!review.find(rel)) {
+            push_error(review.errors, "index.html links to missing " + rel);
+        }
+    }
+}
+
+std::string break_close(std::string text, const char * marker) {
+    const size_t n = std::strlen(marker);
+    size_t at = 0;
+    while ((at = text.find(marker, at)) != std::string::npos) {
+        text.replace(at, n, std::string("<\\/") + (marker + 2));
+        at += n + 1;
+    }
+    return text;
+}
+
+std::string preview_page(const Review & review) {
+    const ReviewedFile * page = review.find("index.html");
+    if (!page) {
+        return {};
+    }
+    struct Swap {
+        size_t begin;
+        size_t end;
+        std::string text;
+    };
+    std::vector<Swap> swaps;
+    const std::string & html = page->text;
+    for (const HtmlTag & tag : find_tags(html)) {
+        bool as_script = false;
+        std::string url;
+        if (tag.name == "link") {
+            url = tag.href;
+            const std::string rel = lower_copy(tag.rel);
+            const bool sheet = rel.find("stylesheet") != std::string::npos || ends_with(lower_copy(url), ".css");
+            if (!sheet) {
+                continue;
+            }
+        } else if (tag.name == "script" && !tag.src.empty()) {
+            url = tag.src;
+            as_script = true;
+        } else {
+            continue;
+        }
+        const std::string rel = project_rel(url);
+        if (rel.empty()) {
+            continue;
+        }
+        const ReviewedFile * file = review.find(rel);
+        if (!file) {
+            continue;
+        }
+        size_t end = tag.end;
+        if (as_script) {
+            const size_t close = html.find("</script>", tag.end);
+            if (close != std::string::npos) {
+                end = close + std::strlen("</script>");
+            }
+            swaps.push_back({ tag.begin, end, "<script>\n" + break_close(file->text, "</script") + "\n</script>" });
+        } else {
+            swaps.push_back({ tag.begin, tag.end, "<style>\n" + break_close(file->text, "</style") + "\n</style>" });
+        }
+    }
+    std::sort(swaps.begin(), swaps.end(), [](const Swap & a, const Swap & b) { return a.begin > b.begin; });
+    std::string out = html;
+    for (const Swap & swap : swaps) {
+        if (swap.begin > out.size() || swap.end > out.size() || swap.end < swap.begin) {
+            continue;
+        }
+        out.replace(swap.begin, swap.end - swap.begin, swap.text);
+    }
+    if (out.size() > 64000) {
+        return {};
+    }
+    return out;
+}
+
+std::string build_note(bool ok, const std::string & kind, const std::string & main_file, bool preview) {
+    if (!ok) {
+        return "Fix every error, then call project_build again. This console cannot start Node or Python.";
+    }
+    if (preview) {
+        return "Built in this process. The web page is open in the preview. This console cannot start Node or Python. On a computer, open index.html in a browser.";
+    }
+    std::string how = "On a computer, run python main.py in that folder.";
+    if (kind == "node-server") {
+        how = "On a computer, run node " + main_file + " in that folder.";
+    } else if (kind == "static-page") {
+        how = "On a computer, open index.html in a browser.";
+    }
+    return "Checked in this process. This console cannot start Node or Python. " + how;
+}
+
+Review gather(const std::string & root, const std::string & name) {
+    Review review;
     if (!name_ok(name)) {
-        return fail("That project name is not allowed");
+        review.fail = "That project name is not allowed";
+        return review;
     }
     const std::string dir = trim_slash(root) + "/" + name;
     std::error_code ec;
     if (!std::filesystem::is_directory(dir, ec)) {
-        return fail("That project does not exist");
+        review.fail = "That project does not exist";
+        return review;
     }
-    const std::string kind = read_kind(dir);
-    if (kind.empty()) {
-        return fail("That project has no kind");
+    review.kind = read_kind(dir);
+    if (review.kind.empty()) {
+        review.fail = "That project has no kind";
+        return review;
     }
     const std::vector<Item> items = list_items(dir);
-    std::vector<std::string> errors;
     if ((int) items.size() > kMaxFiles) {
-        push_error(errors, "This project has more than 40 files");
+        push_error(review.errors, "This project has more than 40 files");
     }
-    nlohmann::json files = nlohmann::json::array();
-    struct Scanned {
-        std::string text;
-        SourceScan scan;
-    };
-    std::vector<std::pair<std::string, Scanned>> scanned;
     for (const auto & item : items) {
-        files.push_back(item.rel);
+        review.files.push_back(item.rel);
         std::string error;
         const std::string text = read_text(item.full, &error);
         if (!error.empty()) {
-            push_error(errors, item.rel + ": " + error);
+            push_error(review.errors, item.rel + ": " + error);
             continue;
         }
-        Scanned one;
+        ReviewedFile one;
+        one.rel = item.rel;
         one.text = text;
         if (is_js(item.rel) || ends_with(item.rel, ".css")) {
             one.scan = scan_source(text, false);
@@ -652,74 +1074,98 @@ std::string do_review(const std::string & root, const std::string & name) {
         } else if (ends_with(item.rel, ".json")) {
             const nlohmann::json parsed = nlohmann::json::parse(text, nullptr, false);
             if (parsed.is_discarded()) {
-                push_error(errors, item.rel + " is not valid JSON");
+                push_error(review.errors, item.rel + " is not valid JSON");
             }
         }
         if (!one.scan.error.empty()) {
-            push_error(errors, item.rel + " " + one.scan.error);
+            push_error(review.errors, item.rel + " " + one.scan.error);
         }
-        scanned.push_back({ item.rel, std::move(one) });
+        review.scanned.push_back(std::move(one));
     }
-    std::string main_file = "server.js";
-    auto find_scan = [&](const std::string & rel) -> const Scanned * {
-        for (const auto & one : scanned) {
-            if (one.first == rel) {
-                return &one.second;
-            }
-        }
-        return nullptr;
-    };
-    if (kind == "node-server") {
-        const Scanned * package = find_scan("package.json");
+    if (review.kind == "node-server") {
+        const ReviewedFile * package = review.find("package.json");
         if (!package) {
-            push_error(errors, "node-server needs package.json");
+            push_error(review.errors, "node-server needs package.json");
         } else {
             const nlohmann::json parsed = nlohmann::json::parse(package->text, nullptr, false);
             if (!parsed.is_object() || !parsed["main"].is_string()) {
-                push_error(errors, "package.json needs a main file");
+                push_error(review.errors, "package.json needs a main file");
             } else {
-                main_file = parsed["main"].get<std::string>();
-                if (main_file.rfind("./", 0) == 0) {
-                    main_file = main_file.substr(2);
+                review.main_file = parsed["main"].get<std::string>();
+                if (review.main_file.rfind("./", 0) == 0) {
+                    review.main_file = review.main_file.substr(2);
                 }
-                if (!path_ok(main_file)) {
-                    push_error(errors, "package.json main is not in this project");
+                if (!path_ok(review.main_file)) {
+                    push_error(review.errors, "package.json main is not in this project");
                 } else {
-                    const Scanned * main = find_scan(main_file);
+                    const ReviewedFile * main = review.find(review.main_file);
                     if (!main) {
-                        push_error(errors, "package.json main is missing");
+                        push_error(review.errors, "package.json main is missing");
                     } else if (blank(main->text)) {
-                        push_error(errors, main_file + " is empty");
+                        push_error(review.errors, review.main_file + " is empty");
                     } else if (main->scan.error.empty() && !main->scan.listen && !main->scan.create_server) {
-                        push_error(errors, main_file + " does not listen");
+                        push_error(review.errors, review.main_file + " does not listen");
                     }
                 }
             }
         }
-    } else if (kind == "static-page") {
-        const Scanned * page = find_scan("index.html");
+    } else if (review.kind == "static-page") {
+        const ReviewedFile * page = review.find("index.html");
         if (!page) {
-            push_error(errors, "static-page needs index.html");
+            push_error(review.errors, "static-page needs index.html");
         } else if (blank(page->text) || page->text.find('<') == std::string::npos) {
-            push_error(errors, "index.html needs a tag");
+            push_error(review.errors, "index.html needs a tag");
         }
     } else {
-        const Scanned * main = find_scan("main.py");
+        const ReviewedFile * main = review.find("main.py");
         if (!main) {
-            push_error(errors, "python needs main.py");
+            push_error(review.errors, "python needs main.py");
         } else if (blank(main->text)) {
-            push_error(errors, "main.py is empty");
+            push_error(review.errors, "main.py is empty");
         }
     }
-    const bool ok = errors.empty();
+    check_local_refs(review);
+    return review;
+}
+
+std::string do_review(const std::string & root, const std::string & name) {
+    const Review review = gather(root, name);
+    if (!review.fail.empty()) {
+        return fail(review.fail);
+    }
+    const bool ok = review.errors.empty();
     return nlohmann::json{
         { "ok", ok },
         { "name", name },
-        { "kind", kind },
-        { "files", std::move(files) },
-        { "errors", errors },
-        { "note", review_note(ok, name, kind, main_file) },
+        { "kind", review.kind },
+        { "files", review.files },
+        { "errors", review.errors },
+        { "note", review_note(ok, name, review.kind, review.main_file) },
     }.dump();
+}
+
+std::string do_build(const std::string & root, const std::string & name) {
+    const Review review = gather(root, name);
+    if (!review.fail.empty()) {
+        return fail(review.fail);
+    }
+    const bool ok = review.errors.empty();
+    std::string page;
+    if (ok && review.kind == "static-page") {
+        page = preview_page(review);
+    }
+    nlohmann::json out = {
+        { "ok", ok },
+        { "name", name },
+        { "kind", review.kind },
+        { "files", review.files },
+        { "errors", review.errors },
+        { "note", build_note(ok, review.kind, review.main_file, !page.empty()) },
+    };
+    if (!page.empty()) {
+        out["page"] = page;
+    }
+    return out.dump();
 }
 
 std::string do_remove(const std::string & root, const std::string & name, const std::string & rel) {
@@ -790,6 +1236,9 @@ std::string project_call(const std::string & root, const std::string & body) {
     }
     if (tool == "review") {
         return do_review(root, name);
+    }
+    if (tool == "build") {
+        return do_build(root, name);
     }
     if (tool == "remove") {
         return do_remove(root, name, field(json, "path"));

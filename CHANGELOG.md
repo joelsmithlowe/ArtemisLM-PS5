@@ -1,14 +1,39 @@
 # Changelog
 
-ArtemisLM PS5 0.12.9, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.9.zip`.
-`contentVersion` is `01.012.009`. If 0.12.8 is the open app, Settings writes this
-into the folder the console launched, marks the files, and closes. Open
-ArtemisLM again from the home screen. A copy still on 0.12.6 or 0.12.7 reloads
-itself, so copy the `PPSA98010` folder once to leave those versions.
+ArtemisLM PS5 0.12.10, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.10.zip`.
+`contentVersion` is `01.012.010`. If 0.12.8 or later is the open app, Settings
+writes this into the folder the console launched, marks the files, and closes.
+Open ArtemisLM again from the home screen. A copy still on 0.12.6 or 0.12.7
+reloads itself, so copy the `PPSA98010` folder once to leave those versions.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.10] - 2026-10-19
+
+### Added
+
+- Phone answers show fenced code with the language and Copy, inline code,
+  headings, lists, and emphasis. Math and science marks become the symbols,
+  such as H₂O and E = mc². A mark after a displayed formula stays on the
+  sentence. A thinking trace folds under the answer. A reply that is only that
+  trace is shown as the answer.
+- Think sits on the composer for one turn. That turn reasons before the answer
+  and gets more tool rounds. The loaded model stays. Reasoning in Settings is
+  unchanged.
+- Projects can check a folder in this process. Run opens a web page in a
+  preview once its local styles and scripts are present. Check reports a
+  missing local file in a Node or Python project. The console still does not
+  start Node or Python.
+- The phone keeps a live load, update, and download under the meters. A load
+  shows the percent on the GPU, whether it is copying the weights or preparing
+  the context, and the model name.
+
+### Changed
+
+- Chat tools are toggles of one size. Tools, Attach, and New match those chips.
+  A tool row stays folded until it is opened.
 
 ## [0.12.9] - 2026-10-19
 
