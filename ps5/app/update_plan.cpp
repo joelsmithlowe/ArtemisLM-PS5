@@ -12,7 +12,9 @@ extern "C" {
 
 #include <nlohmann/json.hpp>
 
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cctype>
 #include <cstdint>
@@ -464,6 +466,18 @@ bool copy_over(const std::filesystem::path & from, const std::filesystem::path &
         set_error(error, "The install did not finish");
         return false;
     }
+    const auto now = fs::file_size(to, ec);
+    if (ec || now != bytes || ::chmod(to.c_str(), 0777) != 0) {
+        std::printf("artemislm-ps5: update: copy failed\n");
+        set_error(error, "The install did not finish");
+        return false;
+    }
+    ::chmod(to.parent_path().c_str(), 0777);
+    const int fd = ::open(to.c_str(), O_RDONLY);
+    if (fd >= 0) {
+        ::fsync(fd);
+        ::close(fd);
+    }
     return true;
 }
 
@@ -689,6 +703,7 @@ bool install_title(const std::string & stage, const std::string & install_dir, s
         set_error(error, "The install did not finish");
         return false;
     }
+    ::chmod(install.c_str(), 0777);
     struct Staged {
         fs::path path;
         std::string rel;
@@ -776,7 +791,86 @@ bool install_title(const std::string & stage, const std::string & install_dir, s
         set_error(error, "The zip has no app");
         return false;
     }
-    return copy_over(eboot_from, eboot_to, error);
+    if (!copy_over(eboot_from, eboot_to, error)) {
+        return false;
+    }
+    const int dfd = ::open(install.c_str(), O_RDONLY);
+    if (dfd >= 0) {
+        ::fsync(dfd);
+        ::close(dfd);
+    }
+    return true;
+}
+
+namespace {
+
+std::string one_line(std::string text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) {
+        text.erase(text.begin());
+    }
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
+        text.pop_back();
+    }
+    const auto cut = text.find_first_of("\r\n");
+    if (cut != std::string::npos) {
+        text.resize(cut);
+    }
+    return text;
+}
+
+// /app0 and /system_ex are the running mount. Writing there and reloading
+// starts the app that is already open.
+bool source_path_ok(const std::string & path) {
+    if (path.size() < 2 || path[0] != '/' || path.find("..") != std::string::npos) {
+        return false;
+    }
+    if (path.find('\\') != std::string::npos || path.find('\n') != std::string::npos ||
+        path.find('\r') != std::string::npos) {
+        return false;
+    }
+    const auto starts = [&](const char * prefix) {
+        const size_t n = std::strlen(prefix);
+        return path.size() >= n && path.compare(0, n, prefix) == 0;
+    };
+    if (path == "/app0" || starts("/app0/")) {
+        return false;
+    }
+    if (starts("/system_ex/") || starts("/system/")) {
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+bool choose_install_dir(const InstallChoice & choice, std::string * dir, std::string * error) {
+    if (!dir) {
+        set_error(error, "The install did not finish");
+        return false;
+    }
+    if (choice.image) {
+        set_error(error, "This copy is a disk image. Install the folder, then update");
+        return false;
+    }
+    const std::string linked = one_line(choice.linked);
+    if (!linked.empty() && source_path_ok(linked)) {
+        *dir = linked;
+        return true;
+    }
+    if (choice.present.size() > 1) {
+        set_error(error, "Two ArtemisLM folders are installed. Keep one, then try again");
+        return false;
+    }
+    if (choice.present.size() == 1 && source_path_ok(choice.present[0])) {
+        *dir = choice.present[0];
+        return true;
+    }
+    if (choice.fallback_parent && source_path_ok(choice.fallback)) {
+        *dir = choice.fallback;
+        return true;
+    }
+    set_error(error, "Copy ArtemisLM PS5 to /data/homebrew once, then updates can install");
+    return false;
 }
 
 std::string sha256_file(const std::string & path) {

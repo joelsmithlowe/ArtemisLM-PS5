@@ -25,6 +25,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace ps5lm {
 
@@ -40,7 +41,7 @@ bool ready = false;
 std::atomic<bool> busy{ false };
 std::atomic<bool> installing{ false };
 std::atomic<bool> want_install{ false };
-std::atomic<bool> restart{ false };
+std::atomic<bool> close_app{ false };
 int tmpl = -1;
 
 void set_status(const std::string & text) {
@@ -189,7 +190,82 @@ bool download_zip(const ReleaseInfo & info, const std::string & zip, std::string
     return true;
 }
 
-// True when the new title is in place and the app should restart.
+bool title_dir(const std::string & dir) {
+    if (dir.empty() || dir[0] != '/') {
+        return false;
+    }
+    struct stat st;
+    if (::stat((dir + "/eboot.bin").c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
+        return false;
+    }
+    return ::stat((dir + "/sce_sys/param.json").c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+
+std::string mount_text(const char * path) {
+    char buf[1024];
+    const ssize_t n = ::readlink(path, buf, sizeof(buf) - 1);
+    if (n > 0 && (size_t) n < sizeof(buf) - 1) {
+        return std::string(buf, (size_t) n);
+    }
+    if (n >= (ssize_t) sizeof(buf) - 1) {
+        return {};
+    }
+    FILE * file = std::fopen(path, "rb");
+    if (!file) {
+        return {};
+    }
+    const bool got = std::fgets(buf, (int) sizeof(buf), file) != nullptr;
+    std::fclose(file);
+    return got ? std::string(buf) : std::string();
+}
+
+void remember_dir(InstallChoice * choice, std::vector<std::pair<dev_t, ino_t>> * seen, const std::string & dir) {
+    if (!title_dir(dir)) {
+        return;
+    }
+    struct stat st;
+    if (::stat(dir.c_str(), &st) != 0) {
+        return;
+    }
+    for (const auto & one : *seen) {
+        if (one.first == st.st_dev && one.second == st.st_ino) {
+            return;
+        }
+    }
+    seen->emplace_back(st.st_dev, st.st_ino);
+    choice->present.push_back(dir);
+}
+
+// The folder ShadowMount launched, not the /app0 mount of the running app.
+InstallChoice install_choice() {
+    InstallChoice choice;
+    choice.fallback = kInstallDir;
+    std::error_code ec;
+    choice.fallback_parent = std::filesystem::is_directory("/data/homebrew", ec);
+    struct stat st;
+    if (::lstat("/user/app/PPSA98010/mount_img.lnk", &st) == 0) {
+        choice.image = true;
+    }
+    const std::string linked = mount_text("/user/app/PPSA98010/mount.lnk");
+    if (title_dir(linked)) {
+        choice.linked = linked;
+    }
+    std::vector<std::pair<dev_t, ino_t>> seen;
+    remember_dir(&choice, &seen, "/data/homebrew/PPSA98010");
+    remember_dir(&choice, &seen, "/data/etaHEN/games/PPSA98010");
+    const char * drives[] = { "/mnt/ext0", "/mnt/ext1", "/mnt/usb0", "/mnt/usb1", "/mnt/usb2", "/mnt/usb3",
+                              "/mnt/usb4", "/mnt/usb5", "/mnt/usb6", "/mnt/usb7" };
+    for (const char * drive : drives) {
+        const std::string root(drive);
+        remember_dir(&choice, &seen, root + "/homebrew/PPSA98010");
+        remember_dir(&choice, &seen, root + "/data/homebrew/PPSA98010");
+        remember_dir(&choice, &seen, root + "/etaHEN/games/PPSA98010");
+        remember_dir(&choice, &seen, root + "/PPSA98010");
+    }
+    return choice;
+}
+
+// True when the new title is in place and the app should close.
 bool run_install() {
     ReleaseInfo info;
     std::string error;
@@ -209,11 +285,6 @@ bool run_install() {
         set_status(std::string("This is ") + PS5LM_VERSION + ", the latest release");
         std::lock_guard<std::mutex> lock(mu);
         ready = false;
-        return false;
-    }
-    std::error_code ec;
-    if (!std::filesystem::is_directory("/data/homebrew", ec)) {
-        set_status("Copy ArtemisLM PS5 to /data/homebrew once, then updates can install");
         return false;
     }
     const double free = drive_free_gib("/data/ArtemisLM/models");
@@ -248,15 +319,31 @@ bool run_install() {
         remove_work();
         return false;
     }
+    std::error_code ec;
     const auto eboot_bytes = std::filesystem::file_size(stage + "/eboot.bin", ec);
     if (ec || eboot_bytes < (8ull << 20)) {
         set_status("The new app is too small");
         remove_work();
         return false;
     }
-    set_status("Installing " + info.version);
-    if (!install_title(stage, kInstallDir, &error)) {
+    const InstallChoice choice = install_choice();
+    std::string install_dir;
+    if (!choose_install_dir(choice, &install_dir, &error)) {
         set_status(error.empty() ? "The install did not finish" : error);
+        remove_work();
+        return false;
+    }
+    set_status("Installing " + info.version);
+    std::printf("artemislm-ps5: update: installing into %s\n", install_dir.c_str());
+    if (!install_title(stage, install_dir, &error)) {
+        set_status(error.empty() ? "The install did not finish" : error);
+        remove_work();
+        return false;
+    }
+    std::error_code installed_ec;
+    const auto installed_bytes = std::filesystem::file_size(install_dir + "/eboot.bin", installed_ec);
+    if (installed_ec || installed_bytes != eboot_bytes) {
+        set_status("The install did not finish");
         remove_work();
         return false;
     }
@@ -266,8 +353,8 @@ bool run_install() {
         ready = false;
         latest = info.version;
     }
-    restart.store(true);
-    set_status("Installed " + info.version + ". Restarting");
+    close_app.store(true);
+    set_status("Installed " + info.version + ". Open ArtemisLM again from the home screen");
     return true;
 }
 
@@ -346,7 +433,7 @@ bool update_take_notice(std::string * text) {
     return true;
 }
 
-bool update_take_restart() { return restart.exchange(false); }
+bool update_take_close() { return close_app.exchange(false); }
 
 std::string update_json() {
     std::string shown;

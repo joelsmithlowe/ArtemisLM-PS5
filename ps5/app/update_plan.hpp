@@ -6,6 +6,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace ps5lm {
 
@@ -36,7 +37,22 @@ bool extract_title_zip(const std::string & zip_path, const std::string & dest, s
 bool stage_ok(const std::string & dest, std::string * error);
 
 // Copies the staged title onto install_dir, replacing each file by a rename.
+// Each file is marked executable, which is what the console requires to start it.
 bool install_title(const std::string & stage, const std::string & install_dir, std::string * error);
+
+// Where a folder install should be written. `linked` is the console's record of
+// the folder it launched, when that record is a real directory. `present` is
+// every other folder copy found. A disk image is refused. /app0 is the running
+// mount, not the folder to write.
+struct InstallChoice {
+    bool                     image = false;
+    std::string              linked;
+    std::vector<std::string> present;
+    std::string              fallback;
+    bool                     fallback_parent = false;
+};
+
+bool choose_install_dir(const InstallChoice & choice, std::string * dir, std::string * error);
 
 // Lowercase hex SHA-256 of a file, or empty when it cannot be read.
 std::string sha256_file(const std::string & path);

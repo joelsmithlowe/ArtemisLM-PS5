@@ -1,12 +1,25 @@
 # Changelog
 
-ArtemisLM PS5 0.12.7, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.7.zip`.
-`contentVersion` is `01.012.007`. A console already on 0.12.6 can install this
-from Settings. An older copy still needs the `PPSA98010` folder copied once.
+ArtemisLM PS5 0.12.8, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.8.zip`.
+`contentVersion` is `01.012.008`. Install this by copying the `PPSA98010` folder
+once. The copy already running reloads itself, so Settings does not finish the
+change. After this version is open, a later update closes the app. Open it
+again from the home screen.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.8] - 2026-10-19
+
+### Fixed
+
+- An update reloaded the app that was already running, so the version stayed
+  the same. The new files are written into the folder the console launched,
+  marked so the console can start them, and the app closes. Open ArtemisLM
+  again from the home screen.
+- A disk image cannot be updated in place. Two folder copies are left as they
+  are until one remains.
 
 ## [0.12.7] - 2026-10-19
 

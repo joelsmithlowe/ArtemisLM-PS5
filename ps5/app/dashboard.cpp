@@ -148,7 +148,7 @@ constexpr SettingCategory kCategories[] = {
     { "Sound and storage",
       { { Setting::sounds, "Sounds", "Interface sounds on the TV" },
         { Setting::download_dir, "Save downloads to", "Internal storage, or ArtemisLM/models on an M.2 or USB drive" },
-        { Setting::app_update, "App update", "Downloads a newer GitHub release, checks it, and restarts" } },
+        { Setting::app_update, "App update", "Downloads a newer release and closes. Open ArtemisLM again" } },
       3 },
     { "Diagnostics", {}, 0 },
     { "Credits", {}, 0 },

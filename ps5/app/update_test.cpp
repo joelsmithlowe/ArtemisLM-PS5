@@ -7,6 +7,8 @@
 
 #include "update_plan.hpp"
 
+#include <sys/stat.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -245,6 +247,9 @@ void check_zip(const std::string & root) {
     write_bytes(home + "/PPSA98010/keep.txt", "stay");
     expect_is(install_title(stage, home + "/PPSA98010", &error), "install", error);
     expect(read_bytes(home + "/PPSA98010/eboot.bin") == "eboot-bytes", "replaced eboot");
+    struct stat installed;
+    expect(::stat((home + "/PPSA98010/eboot.bin").c_str(), &installed) == 0 && (installed.st_mode & 0777) == 0777,
+           "eboot mode");
     expect(read_bytes(home + "/PPSA98010/sce_sys/param.json").find("ArtemisLM") != std::string::npos, "installed param");
     expect(read_bytes(home + "/PPSA98010/keep.txt") == "stay", "left extra file");
     expect(!std::filesystem::exists(home + "/PPSA98010/eboot.bin.new"), "temp name removed");
@@ -323,6 +328,43 @@ void check_zip(const std::string & root) {
     expect(!extract_title_zip(dir + "/notes.zip", dir + "/notes-stage", &error) && error == "The zip has no app", "no title");
 }
 
+void check_choice() {
+    using ps5lm::choose_install_dir;
+    ps5lm::InstallChoice choice;
+    choice.fallback = "/data/homebrew/PPSA98010";
+    std::string dir;
+    std::string error;
+    expect(!choose_install_dir(choice, &dir, &error) &&
+               error == "Copy ArtemisLM PS5 to /data/homebrew once, then updates can install",
+           "no folder");
+    choice.fallback_parent = true;
+    expect_is(choose_install_dir(choice, &dir, &error), "fallback", error);
+    expect(dir == choice.fallback, "fallback path");
+    choice.present.push_back("/mnt/usb0/homebrew/PPSA98010");
+    expect_is(choose_install_dir(choice, &dir, &error), "usb", error);
+    expect(dir == "/mnt/usb0/homebrew/PPSA98010", "usb path");
+    choice.present.push_back("/data/homebrew/PPSA98010");
+    expect(!choose_install_dir(choice, &dir, &error) &&
+               error == "Two ArtemisLM folders are installed. Keep one, then try again",
+           "two folders");
+    choice.linked = "/mnt/ext0/homebrew/PPSA98010";
+    expect_is(choose_install_dir(choice, &dir, &error), "mount record", error);
+    expect(dir == choice.linked, "mount path");
+    choice.image = true;
+    expect(!choose_install_dir(choice, &dir, &error) &&
+               error == "This copy is a disk image. Install the folder, then update",
+           "image");
+    choice.image = false;
+    choice.linked = "/app0";
+    choice.present = { "/data/homebrew/PPSA98010" };
+    expect_is(choose_install_dir(choice, &dir, &error), "ignore app0", error);
+    expect(dir == "/data/homebrew/PPSA98010", "app0 falls through");
+    choice.linked = "/system_ex/app/PPSA98010";
+    expect(choose_install_dir(choice, &dir, &error) && dir == "/data/homebrew/PPSA98010", "ignore system mount");
+    choice.linked = "/data/homebrew/../../tmp/PPSA98010";
+    expect(choose_install_dir(choice, &dir, &error) && dir == "/data/homebrew/PPSA98010", "ignore dotdot");
+}
+
 void check_deflate(const std::string & zip, const std::string & root) {
     const std::string stage = root + "/deflate-stage";
     std::filesystem::remove_all(stage);
@@ -338,6 +380,7 @@ void check_deflate(const std::string & zip, const std::string & root) {
 int main(int argc, char ** argv) {
     check_versions();
     check_parse();
+    check_choice();
     const std::string root = "/tmp/artemis-upd";
     std::filesystem::remove_all(root);
     std::filesystem::remove_all("/tmp/artemis-evil");

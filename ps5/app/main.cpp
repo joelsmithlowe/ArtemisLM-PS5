@@ -1056,6 +1056,7 @@ int main(int, char **) {
     bool rescanning = false;
     bool update_shown = false;
     uint64_t restart_at = 0;  // the frame to stop the model and restart on, or 0
+    uint64_t close_at = 0;    // the frame to close after an update, or 0
     for (uint64_t n = 0;; ++n) {
         const int64_t now = hui::sys::monotonic_us();
         const float dt = n == 0 ? 1.0f / 60.0f : std::min(0.05f, (float) (now - last) / 1e6f);
@@ -1180,9 +1181,11 @@ int main(int, char **) {
             notify(update_note.c_str());
             std::printf("artemislm-ps5: %s\n", update_note.c_str());
         }
-        if (update_take_restart() && restart_at == 0) {
-            dash.set_busy("Updating", update_status());
-            restart_at = n + 3;
+        if (update_take_close() && close_at == 0) {
+            const std::string note = update_status();
+            dash.set_busy("Installed", note);
+            notify(note.c_str());
+            close_at = n + 120;
             update_shown = false;
         } else if (update_installing()) {
             dash.set_busy("Updating", update_status());
@@ -1213,8 +1216,18 @@ int main(int, char **) {
             dash.set_settings(models.settings);
             models.rescan(stats, false);
         }
+        // An update has replaced the folder the console launched. Reloading
+        // /app0 would start the copy that is already running, so the app closes.
+        if (close_at != 0 && n >= close_at) {
+            close_at = 0;
+            std::fflush(nullptr);
+            page_stop();
+            panel_stop();
+            models.stop();
+            sceSystemServiceLoadExec("exit", nullptr);
+        }
         // A restart asked for a few frames ago, once the busy screen is up.
-        if (restart_at != 0 && n >= restart_at) {
+        if (close_at == 0 && restart_at != 0 && n >= restart_at) {
             std::fflush(nullptr);
             // Drop both listeners first. The new process starts while this one
             // is still exiting, and a single refused bind used to stop the load.

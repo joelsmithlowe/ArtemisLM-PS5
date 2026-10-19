@@ -2026,7 +2026,7 @@
       addModelSelect(agent, 'Coordinator', 'coordinator', data.coordinator || '', models);
       addModelSelect(agent, 'Worker', 'worker', data.worker || '', models);
       addSelect(agent, 'Plan length', 'plan_tokens', data.plan_tokens || 256, [['128', 'Short'], ['256', 'Medium'], ['512', 'Long']], '256');
-      var sound = addGroup(form, 'Sound and storage', 'Sounds play on the TV. Downloads go to the folder below.');
+      var sound = addGroup(form, 'Sound and storage', 'Sounds play on the TV. Downloads go to the folder below. An update closes the app. Open it again from the home screen.');
       addCheck(sound, 'Sounds', 'sounds', data.sounds, true);
       addSelect(sound, 'Save downloads to', 'download_dir', data.download_dir, [
         ['/data/ArtemisLM/models', 'Internal'],
