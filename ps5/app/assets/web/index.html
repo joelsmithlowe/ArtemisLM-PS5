@@ -97,41 +97,70 @@
   .caret { display: inline-block; width: 0.45em; height: 1.05em; margin-left: 1px;
     vertical-align: text-bottom; background: var(--accent); }
 
-  .tools { display: flex; flex-direction: column; gap: 0.45rem; margin: 0 0 0.75rem; }
+  .tools { display: flex; flex-direction: column; gap: 0.35rem; margin: 0 0 0.75rem; }
   .tools:empty { display: none; }
-  .tool { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    padding: 0.55rem 0.75rem; }
-  .tool-name { color: var(--accent); font-size: 0.75rem; font-weight: 650;
-    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.2rem; }
-  .tool-body { color: var(--muted); font-size: 0.875rem; line-height: 1.4;
+  .tool { background: transparent; border: 0; border-radius: 10px; padding: 0; }
+  .tool-name { display: block; width: 100%; text-align: left; background: transparent; border: 0;
+    color: var(--faint); font-size: 0.8125rem; font-weight: 650; letter-spacing: 0;
+    text-transform: none; padding: 0.15rem 0.15rem; min-height: 28px; }
+  .tool-name:before { content: "\25B8  "; }
+  .tool.open .tool-name:before, .tool.bad .tool-name:before { content: "\25BE  "; }
+  .tool-name:hover { color: var(--text); }
+  .tool-body { display: none; color: var(--muted); font-size: 0.875rem; line-height: 1.4;
     max-height: 9rem; overflow: auto; -webkit-overflow-scrolling: touch;
-    overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap; }
+    overflow-wrap: anywhere; word-wrap: break-word; white-space: pre-wrap;
+    margin: 0.15rem 0 0.35rem; padding: 0.55rem 0.7rem; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; }
+  .tool.open .tool-body, .tool.bad .tool-body { display: block; }
+  .tool.bad .tool-name { color: var(--err); }
   .tool.bad .tool-body { color: var(--err); }
 
-  .composer { flex: none; border-top: 1px solid var(--border); background: rgba(12, 12, 18, 0.88);
-    padding: 0.7rem 1rem 0.85rem; }
-  .composer form { max-width: 42rem; margin: 0 auto; display: flex; gap: 0.5rem; align-items: flex-end; }
-  textarea { flex: 1; min-width: 0; min-height: 44px; max-height: 8rem; resize: none;
-    font-size: 16px; line-height: 1.4; color: var(--text); background: var(--surface);
-    border: 1px solid var(--border); border-radius: 12px; padding: 0.65rem 0.8rem; }
+  .composer { flex: none; background: linear-gradient(to top, rgba(12, 12, 18, 0.96), rgba(12, 12, 18, 0));
+    padding: 0.35rem 1rem 0.85rem; }
+  .dock { max-width: 42rem; margin: 0 auto; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 22px; padding: 0.35rem 0.45rem 0.4rem;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35); }
+  .composer form { display: block; margin: 0; }
+  textarea { display: block; width: 100%; box-sizing: border-box; min-width: 0; min-height: 44px; max-height: 8rem; resize: none;
+    font-size: 16px; line-height: 1.4; color: var(--text); background: transparent;
+    border: 0; border-radius: 12px; padding: 0.55rem 0.6rem 0.25rem; }
   textarea::placeholder { color: var(--faint); }
-  .send { flex: none; min-width: 4.6rem; min-height: 44px; border: 0; border-radius: 12px;
-    background: var(--accent); color: var(--accent-ink); font-weight: 650; padding: 0 0.9rem; }
+  .dock-row { display: flex; align-items: center; gap: 0.15rem; }
+  .ghost { min-height: 36px; border-radius: 999px; border: 0; background: transparent;
+    color: var(--muted); padding: 0 0.7rem; }
+  .ghost:hover { background: var(--raised); color: var(--text); }
+  .send { margin-left: auto; flex: none; min-width: 4.6rem; min-height: 36px; border: 0; border-radius: 999px;
+    background: var(--accent); color: var(--accent-ink); font-weight: 650; padding: 0 0.95rem; }
   .send.stop { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
-  .bar { max-width: 42rem; margin: 0 auto 0.45rem; display: flex; gap: 0.4rem; align-items: center; }
-  .bar button { min-height: 36px; border-radius: 999px; border: 1px solid var(--border);
-    background: var(--surface); color: var(--muted); padding: 0 0.75rem; }
   .menu { position: relative; }
-  .menu-panel { display: none; position: absolute; left: 0; bottom: 2.5rem; z-index: 5; min-width: 15rem;
-    background: #17171f; border: 1px solid var(--border); border-radius: 12px; padding: 0.35rem 0.7rem; }
+  .menu-panel { display: none; position: absolute; left: 0; bottom: calc(100% + 0.45rem); z-index: 6;
+    width: 20rem; max-width: calc(100vw - 2rem); background: #17171f; border: 1px solid var(--border);
+    border-radius: 16px; padding: 0.35rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
   .menu.open .menu-panel { display: block; }
-  .menu-panel label { display: flex; align-items: center; gap: 0.55rem; min-height: 36px; color: var(--body); }
+  .tool-row { display: flex; align-items: flex-start; gap: 0.6rem; min-height: 44px;
+    padding: 0.4rem 0.45rem; border-radius: 10px; color: var(--body); }
+  .tool-row:hover { background: var(--raised); }
+  .tool-row input { margin-top: 0.2rem; }
+  .tool-copy { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+  .tool-title { color: var(--text); font-size: 0.9rem; }
+  .tool-hint { color: var(--faint); font-size: 0.78rem; line-height: 1.3; }
+  .pills { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0 0.45rem 0.15rem; }
+  .pills:empty { display: none; }
+  .pill { color: var(--faint); font-size: 0.75rem; border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.05rem 0.5rem; }
   .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; max-width: 42rem; margin: 0 auto 0.4rem; }
   .chips:empty { display: none; }
   .chip { display: flex; align-items: center; gap: 0.35rem; max-width: 100%;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    background: var(--raised); border: 1px solid var(--border); border-radius: 999px;
     color: var(--body); padding: 0.2rem 0.55rem 0.2rem 0.75rem; font-size: 0.8125rem; }
   .chip button { border: 0; background: transparent; color: var(--muted); min-height: 28px; padding: 0 0.2rem; }
+  .file-row { display: flex; align-items: center; gap: 0.65rem; min-height: 48px;
+    padding: 0.15rem 0.15rem; border-bottom: 1px solid var(--border); }
+  .file-row span { flex: 1; min-width: 0; color: var(--text); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .file-row em { flex: none; color: var(--faint); font-style: normal; font-size: 0.8125rem; }
+  .file-row button { flex: none; min-height: 36px; border: 0; background: transparent;
+    color: var(--accent); padding: 0 0.35rem; font-weight: 650; }
   .filebody { margin: 0.6rem 0 0; padding: 0.75rem; max-height: 18rem; overflow: auto;
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
     color: var(--body); white-space: pre-wrap; overflow-wrap: anywhere; word-wrap: break-word; }
@@ -185,7 +214,7 @@
   <div class="column" id="log">
     <div class="empty" id="empty">
       <h1>Ask the console</h1>
-      <p>A question about today reads the clock on the PlayStation, then searches the web with that date, and answers from what came back.</p>
+      <p>A question about today reads the clock on the PlayStation, then searches the web with that date, and answers from what came back. Ask it to code an app and the files land in Projects.</p>
       <div class="ideas">
         <button class="idea" type="button">What is the USD to AUD rate today?</button>
         <button class="idea" type="button">What is the weather today?</button>
@@ -213,15 +242,9 @@
 
 <div class="page off" id="view-projects">
   <div class="column">
-    <p class="note">Projects live in /data/ArtemisLM/projects, next to the models folder. Ask chat to code an app, or create a folder here. This console stores and reviews the files. It does not start Node or Python. A web page can be previewed below.</p>
-    <div class="searchbar">
-      <input id="proj-name" type="text" maxlength="32" placeholder="Project name" autocomplete="off">
-      <select id="proj-kind" aria-label="Kind">
-        <option value="static-page">Web page</option>
-        <option value="node-server">Node server</option>
-        <option value="python">Python</option>
-      </select>
-      <button id="proj-new" type="button">Create</button>
+    <p class="note">Projects live in /data/ArtemisLM/projects, next to the models folder. Ask in Chat and the files are saved here. This console stores and reviews them. It does not start Node or Python. A web page can be previewed below.</p>
+    <div class="rowbtns">
+      <button id="proj-ask" class="primary" type="button">Ask chat to build a page</button>
     </div>
     <div class="status" id="proj-status">Loading projects…</div>
     <div id="proj-list"></div>
@@ -240,20 +263,23 @@
 </div>
 
 <div class="composer">
-  <div class="chips" id="chips"></div>
-  <div class="bar">
-    <div class="menu" id="tool-menu">
-      <button type="button" id="tool-toggle">Tools</button>
-      <div class="menu-panel" id="tool-panel"></div>
-    </div>
-    <button type="button" id="attach-btn">Attach</button>
-    <button type="button" id="new-chat">New</button>
+  <div class="dock">
+    <div class="chips" id="chips"></div>
+    <form id="form">
+      <textarea id="input" rows="1" placeholder="Message" autocomplete="off"></textarea>
+      <div class="pills" id="tool-pills"></div>
+      <div class="dock-row">
+        <div class="menu" id="tool-menu">
+          <button class="ghost" type="button" id="tool-toggle">Tools</button>
+          <div class="menu-panel" id="tool-panel"></div>
+        </div>
+        <button class="ghost" type="button" id="attach-btn">Attach</button>
+        <button class="ghost" type="button" id="new-chat">New</button>
+        <button class="send" id="send" type="submit">Send</button>
+      </div>
+    </form>
     <input id="attach-file" type="file" accept="image/*,.txt,.md,.json,.js,.mjs,.html,.css,.py,.svg,.csv" multiple style="position:absolute;left:-9999px;width:1px;height:1px;">
   </div>
-  <form id="form">
-    <textarea id="input" rows="1" placeholder="Message" autocomplete="off"></textarea>
-    <button class="send" id="send" type="submit">Send</button>
-  </form>
 </div>
 
 <script>
@@ -405,9 +431,15 @@
   function addTool(parent, title, body, bad) {
     var card = document.createElement('div');
     card.className = bad ? 'tool bad' : 'tool';
-    var name = document.createElement('div');
+    var name = document.createElement('button');
+    name.type = 'button';
     name.className = 'tool-name';
     name.textContent = title;
+    name.onclick = function () {
+      var isBad = card.className.indexOf('bad') >= 0;
+      var open = card.className.indexOf('open') >= 0;
+      card.className = (isBad ? 'tool bad' : 'tool') + (open ? '' : ' open');
+    };
     var text = document.createElement('div');
     text.className = 'tool-body';
     text.textContent = body;
@@ -1763,6 +1795,8 @@
     });
   }
   var updateTimer = 0;
+  var updateTries = 0;
+  var updateSeen = false;
   function paintUpdate() {
     if (updateTimer) {
       clearTimeout(updateTimer);
@@ -1783,9 +1817,15 @@
         go.disabled = !!data.installing;
         go.textContent = data.installing ? 'Installing...' : (data.ready ? 'Install the update' : 'Check GitHub');
       }
+      var keep = false;
       if (data.installing) {
-        updateTimer = setTimeout(paintUpdate, 1500);
+        updateSeen = true;
+        keep = true;
+      } else if (!updateSeen && updateTries > 0) {
+        updateTries -= 1;
+        keep = true;
       }
+      if (keep) updateTimer = setTimeout(paintUpdate, 1500);
     });
   }
   function setupSentence(data) {
@@ -1922,6 +1962,8 @@
       go.onclick = function () {
         go.disabled = true;
         line.textContent = 'Asking GitHub.';
+        updateSeen = false;
+        updateTries = 8;
         panelSend('POST', '/update', { install: true }, function (c, d) {
           if (d && d.status) line.textContent = d.status;
           paintUpdate();
@@ -1988,20 +2030,44 @@
       })(attachments[i], i);
     }
   }
+  function toolRows() {
+    return [
+      ['search', 'Web search', 'Search', 'Rates, weather, and news'],
+      ['clock', 'Date and time', 'Clock', 'The clock on this console'],
+      ['projects', 'Projects', 'Projects', 'Write apps into /data/ArtemisLM/projects'],
+      ['files', 'Files', 'Files', 'Folders the console can see'],
+      ['notes', 'Notes', 'Notes', 'A short note kept outside the chat'],
+      ['reference', 'Reference tables', 'Reference', 'Units, dates, constants, and status codes']
+    ];
+  }
+  function toolRowOn(key) {
+    if ((key === 'projects' || key === 'files' || key === 'notes') && !fileToolsOn) return false;
+    return !!toolOn[key];
+  }
   function toolCount() {
+    var rows = toolRows();
     var n = 0;
-    if (toolOn.search) n += 1;
-    if (toolOn.clock) n += 1;
-    if (toolOn.projects && fileToolsOn) n += 1;
-    if (toolOn.files && fileToolsOn) n += 1;
-    if (toolOn.notes && fileToolsOn) n += 1;
-    if (toolOn.reference) n += 1;
+    for (var i = 0; i < rows.length; i++) if (toolRowOn(rows[i][0])) n += 1;
     return n;
+  }
+  function paintPills() {
+    var box = document.getElementById('tool-pills');
+    if (!box) return;
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var rows = toolRows();
+    for (var i = 0; i < rows.length; i++) {
+      if (!toolRowOn(rows[i][0])) continue;
+      var pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.textContent = rows[i][2];
+      box.appendChild(pill);
+    }
   }
   function paintTools() {
     var panel = document.getElementById('tool-panel');
     var toggle = document.getElementById('tool-toggle');
     if (toggle) toggle.textContent = 'Tools ' + toolCount();
+    paintPills();
     if (!panel) return;
     while (panel.firstChild) panel.removeChild(panel.firstChild);
     if (!fileToolsOn) {
@@ -2010,17 +2076,11 @@
       note.textContent = 'Projects, files, and notes follow File tools in Settings.';
       panel.appendChild(note);
     }
-    var rows = [
-      ['search', 'Web search'],
-      ['clock', 'Date and time'],
-      ['projects', 'Projects'],
-      ['files', 'Files'],
-      ['notes', 'Notes'],
-      ['reference', 'Reference tables']
-    ];
+    var rows = toolRows();
     for (var i = 0; i < rows.length; i++) {
-      (function (key, label) {
+      (function (key, label, hint) {
         var line = document.createElement('label');
+        line.className = 'tool-row';
         var box = document.createElement('input');
         box.type = 'checkbox';
         box.checked = !!toolOn[key];
@@ -2032,11 +2092,22 @@
           toolTouched = true;
           toolOn[key] = box.checked;
           if (toggle) toggle.textContent = 'Tools ' + toolCount();
+          paintPills();
         };
+        var copy = document.createElement('span');
+        copy.className = 'tool-copy';
+        var title = document.createElement('span');
+        title.className = 'tool-title';
+        title.textContent = label;
+        var sub = document.createElement('span');
+        sub.className = 'tool-hint';
+        sub.textContent = hint;
+        copy.appendChild(title);
+        copy.appendChild(sub);
         line.appendChild(box);
-        line.appendChild(document.createTextNode(' ' + label));
+        line.appendChild(copy);
         panel.appendChild(line);
-      })(rows[i][0], rows[i][1]);
+      })(rows[i][0], rows[i][1], rows[i][3]);
     }
   }
   function readAttachment(file) {
@@ -2087,6 +2158,12 @@
     frame.className = 'preview';
     try { frame.srcdoc = text; } catch (e2) { frame.className = 'preview off'; }
   }
+  function kindLabel(kind) {
+    if (kind === 'static-page') return 'Web page';
+    if (kind === 'node-server') return 'Node server';
+    if (kind === 'python') return 'Python';
+    return kind || 'Project';
+  }
   function loadProjects() {
     var status = document.getElementById('proj-status');
     var list = document.getElementById('proj-list');
@@ -2103,27 +2180,23 @@
         return;
       }
       var projects = data.projects || [];
-      if (status) status.textContent = projects.length ? (projects.length + ' projects in /data/ArtemisLM/projects.') : 'No projects yet. Create one here, or ask chat to code an app.';
+      if (status) status.textContent = projects.length ? (projects.length + ' projects in /data/ArtemisLM/projects.') : 'No projects yet. Ask in Chat and the files show up here.';
       for (var i = 0; i < projects.length; i++) {
         (function (p) {
-          var card = document.createElement('div');
-          card.className = 'card';
-          var title = document.createElement('h2');
+          var row = document.createElement('div');
+          row.className = 'file-row';
+          var title = document.createElement('span');
           title.textContent = p.name;
-          var meta = document.createElement('p');
-          meta.textContent = p.kind || '';
-          var buttons = document.createElement('div');
-          buttons.className = 'rowbtns';
+          var meta = document.createElement('em');
+          meta.textContent = kindLabel(p.kind);
           var open = document.createElement('button');
           open.type = 'button';
-          open.className = 'primary';
           open.textContent = 'Files';
           open.onclick = function () { loadProjectFiles(p.name); };
-          buttons.appendChild(open);
-          card.appendChild(title);
-          card.appendChild(meta);
-          card.appendChild(buttons);
-          if (list) list.appendChild(card);
+          row.appendChild(title);
+          row.appendChild(meta);
+          row.appendChild(open);
+          if (list) list.appendChild(row);
         })(projects[i]);
       }
     });
@@ -2145,12 +2218,10 @@
       if (status) status.textContent = name + (data.kind ? ' \u00b7 ' + data.kind : '') + ' \u00b7 ' + names.length + ' files';
       for (var i = 0; i < names.length; i++) {
         (function (path) {
-          var card = document.createElement('div');
-          card.className = 'card';
-          var title = document.createElement('h2');
+          var row = document.createElement('div');
+          row.className = 'file-row';
+          var title = document.createElement('span');
           title.textContent = path;
-          var buttons = document.createElement('div');
-          buttons.className = 'rowbtns';
           var open = document.createElement('button');
           open.type = 'button';
           open.textContent = 'Read';
@@ -2160,34 +2231,20 @@
               else if (view) view.textContent = (d && d.error) || 'The file did not open.';
             });
           };
-          buttons.appendChild(open);
-          card.appendChild(title);
-          card.appendChild(buttons);
-          if (files) files.appendChild(card);
+          row.appendChild(title);
+          row.appendChild(open);
+          if (files) files.appendChild(row);
         })(names[i]);
       }
     });
   }
-  function createProject() {
-    var status = document.getElementById('proj-status');
-    var nameBox = document.getElementById('proj-name');
-    var kindBox = document.getElementById('proj-kind');
-    var name = trim(nameBox ? nameBox.value : '');
-    var kind = kindBox ? kindBox.value : 'static-page';
-    if (!name) {
-      if (status) status.textContent = 'Type a project name. Start with a letter or a digit. Use letters, digits, _ or -.';
-      return;
-    }
-    if (status) status.textContent = 'Creating ' + name + '\u2026';
-    panelSend('POST', '/project', { tool: 'create', name: name, kind: kind }, function (code, data) {
-      if (!data || data.error) {
-        if (status) status.textContent = (data && data.error) || 'Could not create that project. Turn on file tools in Settings.';
-        return;
-      }
-      if (nameBox) nameBox.value = '';
-      loadProjects();
-      loadProjectFiles(name);
-    });
+  function askProject() {
+    showTab('chat');
+    var box = document.getElementById('input');
+    if (!box) return;
+    box.value = 'Code a small web page on this console';
+    grow();
+    box.focus();
   }
   paintTools();
   document.getElementById('tool-toggle').onclick = function (e) {
@@ -2205,16 +2262,7 @@
     inputFile.value = '';
   };
   document.getElementById('new-chat').onclick = newChat;
-  document.getElementById('proj-new').onclick = createProject;
-  document.getElementById('proj-name').onkeydown = function (e) {
-    e = e || window.event;
-    var key = e.key || e.keyCode;
-    if (key === 'Enter' || key === 13) {
-      if (e.preventDefault) e.preventDefault();
-      createProject();
-      return false;
-    }
-  };
+  document.getElementById('proj-ask').onclick = askProject;
   if (document.addEventListener) {
     document.addEventListener('click', function (e) {
       var menu = document.getElementById('tool-menu');

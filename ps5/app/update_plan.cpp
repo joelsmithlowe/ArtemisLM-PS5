@@ -437,6 +437,7 @@ bool copy_over(const std::filesystem::path & from, const std::filesystem::path &
     std::error_code ec;
     const auto bytes = fs::file_size(from, ec);
     if (ec) {
+        std::printf("artemislm-ps5: update: copy failed\n");
         set_error(error, "The install did not finish");
         return false;
     }
@@ -445,6 +446,7 @@ bool copy_over(const std::filesystem::path & from, const std::filesystem::path &
     fs::copy_file(from, tmp, fs::copy_options::overwrite_existing, ec);
     if (ec || fs::file_size(tmp, ec) != bytes) {
         fs::remove(tmp);
+        std::printf("artemislm-ps5: update: copy failed\n");
         set_error(error, "The install did not finish");
         return false;
     }
@@ -458,6 +460,7 @@ bool copy_over(const std::filesystem::path & from, const std::filesystem::path &
     }
     if (ec) {
         fs::remove(tmp);
+        std::printf("artemislm-ps5: update: copy failed\n");
         set_error(error, "The install did not finish");
         return false;
     }
@@ -630,6 +633,43 @@ bool stage_ok(const std::string & dest, std::string * error) {
     return true;
 }
 
+namespace {
+
+// A directory entry name, not an absolute path. ".." inside the name is rejected
+// so a joined destination cannot leave the install folder.
+bool staged_name_ok(const std::string & name) {
+    if (name.empty() || name == "." || name == ".." || name.find("..") != std::string::npos) {
+        return false;
+    }
+    for (size_t i = 0; i < name.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(name[i]);
+        if (c < 0x20 || name[i] == '/' || name[i] == '\\' || name[i] == ':') {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::filesystem::path staged_dest(const std::filesystem::path & install, const std::string & rel) {
+    namespace fs = std::filesystem;
+    fs::path to = install;
+    size_t start = 0;
+    while (start < rel.size()) {
+        const size_t slash = rel.find('/', start);
+        const std::string part = slash == std::string::npos ? rel.substr(start) : rel.substr(start, slash - start);
+        if (!part.empty()) {
+            to /= part;
+        }
+        if (slash == std::string::npos) {
+            break;
+        }
+        start = slash + 1;
+    }
+    return to;
+}
+
+}  // namespace
+
 bool install_title(const std::string & stage, const std::string & install_dir, std::string * error) {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -649,12 +689,27 @@ bool install_title(const std::string & stage, const std::string & install_dir, s
         set_error(error, "The install did not finish");
         return false;
     }
-    std::vector<fs::path> files;
-    std::vector<fs::path> stack = { fs::path(stage) };
+    struct Staged {
+        fs::path path;
+        std::string rel;
+    };
+    struct Walk {
+        fs::path path;
+        std::string rel;
+        int depth;
+    };
+    std::vector<Staged> files;
+    std::vector<Walk> stack = { { fs::path(stage), "", 0 } };
     while (!stack.empty()) {
-        const fs::path dir = stack.back();
+        const Walk dir = stack.back();
         stack.pop_back();
-        fs::directory_iterator it(dir, ec), end;
+        if (dir.depth > 8) {
+            std::printf("artemislm-ps5: update: staged entry is not a file\n");
+            set_error(error, "The install did not finish");
+            return false;
+        }
+        ec.clear();
+        fs::directory_iterator it(dir.path, ec), end;
         if (ec) {
             set_error(error, "The install did not finish");
             return false;
@@ -664,16 +719,32 @@ bool install_title(const std::string & stage, const std::string & install_dir, s
                 set_error(error, "The install did not finish");
                 return false;
             }
-            const fs::file_status st = it->symlink_status(ec);
-            if (ec || fs::is_symlink(st)) {
+            const fs::path from = it->path();
+            const std::string name = from.filename().generic_string();
+            if (name == "." || name == "..") {
+                continue;
+            }
+            if (!staged_name_ok(name)) {
+                std::printf("artemislm-ps5: update: staged name rejected\n");
                 set_error(error, "The staged app has an unsafe path");
                 return false;
             }
-            if (fs::is_directory(st)) {
-                stack.push_back(it->path());
-            } else if (fs::is_regular_file(st)) {
-                files.push_back(it->path());
+            // lstat can fail for an ordinary file on this console. That is not a symlink.
+            std::error_code link_ec;
+            if (fs::is_symlink(from, link_ec) && !link_ec) {
+                std::printf("artemislm-ps5: update: staged symlink rejected\n");
+                set_error(error, "The staged app has an unsafe path");
+                return false;
+            }
+            const std::string rel = dir.rel.empty() ? name : dir.rel + "/" + name;
+            std::error_code dir_ec;
+            std::error_code file_ec;
+            if (fs::is_directory(from, dir_ec) && !dir_ec) {
+                stack.push_back({ from, rel, dir.depth + 1 });
+            } else if (fs::is_regular_file(from, file_ec) && !file_ec) {
+                files.push_back({ from, rel });
             } else {
+                std::printf("artemislm-ps5: update: staged entry is not a file\n");
                 set_error(error, "The staged app has an unsafe path");
                 return false;
             }
@@ -683,32 +754,17 @@ bool install_title(const std::string & stage, const std::string & install_dir, s
             }
         }
     }
-    const std::string root = fs::path(stage).lexically_normal().string();
     std::vector<std::pair<fs::path, fs::path>> plan;
     fs::path eboot_from, eboot_to;
     bool have_eboot = false;
-    for (const fs::path & from : files) {
-        std::string full = from.lexically_normal().string();
-        if (full.size() < root.size() || full.compare(0, root.size(), root) != 0 ||
-            (full.size() > root.size() && full[root.size()] != '/')) {
-            set_error(error, "The staged app has an unsafe path");
-            return false;
-        }
-        std::string rel = full.substr(root.size());
-        if (!rel.empty() && (rel[0] == '/' || rel[0] == '\\')) {
-            rel.erase(rel.begin());
-        }
-        if (rel.empty() || rel.find("..") != std::string::npos) {
-            set_error(error, "The staged app has an unsafe path");
-            return false;
-        }
-        const fs::path to = install / rel;
-        if (rel == "eboot.bin") {
-            eboot_from = from;
+    for (const Staged & item : files) {
+        const fs::path to = staged_dest(install, item.rel);
+        if (item.rel == "eboot.bin") {
+            eboot_from = item.path;
             eboot_to = to;
             have_eboot = true;
         } else {
-            plan.emplace_back(from, to);
+            plan.emplace_back(item.path, to);
         }
     }
     for (const auto & item : plan) {

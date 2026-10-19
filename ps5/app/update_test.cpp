@@ -250,6 +250,21 @@ void check_zip(const std::string & root) {
     expect(!std::filesystem::exists(home + "/PPSA98010/eboot.bin.new"), "temp name removed");
     expect(!install_title(stage, dir + "/missing/child/PPSA98010", &error), "missing parent");
 
+    const std::string link = stage + "/link.bin";
+    std::error_code link_ec;
+    std::filesystem::create_symlink(stage + "/eboot.bin", link, link_ec);
+    expect(!link_ec, "symlink created");
+    expect(!install_title(stage, home + "/PPSA98010", &error) &&
+               error == "The staged app has an unsafe path",
+           "rejects symlink");
+    std::filesystem::remove(link, link_ec);
+    write_bytes(stage + "/..sneaky", "nope");
+    expect(!install_title(stage, home + "/PPSA98010", &error) &&
+               error == "The staged app has an unsafe path",
+           "rejects dotdot name");
+    std::filesystem::remove(stage + "/..sneaky");
+    expect_is(install_title(stage, home + "/PPSA98010", &error), "install again", error);
+
     write_bytes(dir + "/evil.zip", make_zip({
         title_file("PPSA98010/eboot.bin", "eboot-bytes"),
         title_file("PPSA98010/../../artemis-evil/pwned", "pwned-marker"),

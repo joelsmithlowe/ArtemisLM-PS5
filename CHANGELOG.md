@@ -1,12 +1,32 @@
 # Changelog
 
-ArtemisLM PS5 0.12.5, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.5.zip`.
-`contentVersion` is `01.012.005`. A newer release installs from Settings, or by
+ArtemisLM PS5 0.12.6, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.6.zip`.
+`contentVersion` is `01.012.006`. A newer release installs from Settings, or by
 copying the `PPSA98010` folder over the installed one.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.6] - 2026-10-19
+
+### Fixed
+
+- An update that had already unpacked could stop with "The staged app has an
+  unsafe path" and leave the old app running. The installer copies that staged
+  title. A symlink, or a name containing `..`, is still refused.
+- Install this release by copying the `PPSA98010` folder once. The copy already
+  on the console still has the old check, so Settings will refuse this zip.
+  Later releases can install from Settings.
+
+### Changed
+
+- The phone message box is one composer. Tools, Attach, and New sit with Send.
+  Each tool has a short description, and the ones that are on show under the
+  message. A tool line in the chat opens when you tap it.
+- Chat creates a project. The Projects tab lists `/data/ArtemisLM/projects` and
+  can preview a web page. The console stores and reviews those files. It does
+  not start Node or Python.
 
 ## [0.12.5] - 2026-10-19
 
