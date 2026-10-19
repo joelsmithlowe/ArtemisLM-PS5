@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <new>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -431,6 +432,7 @@ std::string base_name(const std::string & path) {
 // ---- the server thread ------------------------------------------------------------
 
 std::atomic<int> g_server_rc{ -1 };   // llama-server's exit code once it returns; -1 while it runs
+std::atomic<int> g_server_oom{ 0 };  // 1 when the server thread ran out of memory
 std::vector<std::string> g_server_args;
 
 void * run_server(void *) {
@@ -443,6 +445,10 @@ void * run_server(void *) {
     int rc = 1;
     try {
         rc = llama_server((int) argv.size() - 1, argv.data());
+    } catch (const std::bad_alloc &) {
+        g_server_oom = 1;
+        panel_set_fault("Out of memory. Set Memory fit to Spill to RAM, then load the model again.");
+        std::printf("artemislm-ps5: out of memory\n");
     } catch (const std::exception & e) {
         std::printf("artemislm-ps5: exception: %s\n", e.what());
     } catch (...) {
@@ -616,6 +622,8 @@ struct Models {
         }
         g_server_args = args;
         g_server_rc = -1;
+        g_server_oom = 0;
+        panel_set_fault("");
         running = path;
         panel_set_running(path);
         stats.set_model(model_part);
@@ -809,7 +817,9 @@ int main(int, char **) {
     };
     // The splash at once, so a restart for a model is never a black screen.
     if (ui_ok) {
-        dash.set_busy("Starting", "Opening the GPU and reading the models");
+        const bool moving = access(kPendingMove, F_OK) == 0;
+        dash.set_busy(moving ? "Moving into ArtemisLM" : "Starting",
+                      moving ? "The copy is checked, then the old file is removed" : "Opening the GPU and reading the models");
         render();
         display.swap();
     }
@@ -852,6 +862,46 @@ int main(int, char **) {
             const auto type = ggml_backend_dev_type(dev);
             if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
                 models.budget_gib = free / 1073741824.0;
+            }
+        }
+
+        // A move of the loaded model restarts with nothing mapped. The copy
+        // has to finish before the library is read, or the new path is not
+        // in the list and the old path is what stays loaded.
+        std::string move_error;
+        if (access(kPendingMove, F_OK) == 0) {
+            stats.set_phase("Moving into ArtemisLM");
+        }
+        {
+            std::string moved_to, from;
+            const std::string note = library_finish_move(&models.settings, &moved_to, &from);
+            if (!note.empty()) {
+                std::printf("artemislm-ps5: %s\n", note.c_str());
+            }
+            if (!moved_to.empty()) {
+                save_settings(kSettings, models.settings);
+                auto lines = read_lines(kArgs);
+                bool changed = false;
+                for (auto & line : lines) {
+                    if (line == from) {
+                        line = moved_to;
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    std::ofstream out(kArgs, std::ios::trunc);
+                    for (const auto & line : lines) {
+                        out << line << '\n';
+                    }
+                }
+                const auto choice = read_lines(kChoice);
+                if (choice.empty() || choice[0] == "none" || choice[0] == from) {
+                    std::ofstream(kChoice) << moved_to << '\n';
+                }
+                stats.set_phase("Loading " + base_name(moved_to));
+            } else if (!note.empty() && note.rfind("Moved ", 0) != 0) {
+                move_error = note;
+                stats.set_phase(note);
             }
         }
 
@@ -923,7 +973,7 @@ int main(int, char **) {
             stats.set_state(ServerState::no_model);
             idle_page = true;
         }
-        stats.set_phase("");
+        stats.set_phase(idle_page ? move_error : std::string());
     };
     std::atomic<bool> booted{ false };
     std::function<void()> boot_then = [&] {
@@ -944,10 +994,13 @@ int main(int, char **) {
         int64_t at = start;
         while (ui_ok && !booted) {
             const int64_t now = hui::sys::monotonic_us();
-            if (now - start > 1200000) {
+            const Live booting_live = stats.snapshot();
+            // A large copy stays on this screen. Home does not say that the
+            // file is still being checked.
+            if (now - start > 1200000 && booting_live.phase.rfind("Moving", 0) != 0) {
                 dash.set_busy("");
             }
-            dash.set_live(stats.snapshot());
+            dash.set_live(booting_live);
             quiet.clear();
             dash.update(hui::InputFrame{}, std::min(0.05f, (float) (now - at) / 1e6f), quiet);
             at = now;
@@ -1021,6 +1074,9 @@ int main(int, char **) {
                 dash.set_busy("Loading " + base_name(models.running) + " text only",
                               "Its image projector did not load, see /data/ArtemisLM/llama.log");
                 restart_at = n + 3;
+            } else if (g_server_oom.load()) {
+                stats.set_phase("Out of memory. Spill to RAM in Settings, then load the model again.");
+                notify("ArtemisLM PS5: out of memory. Spill to RAM in Settings, then load the model again");
             } else {
                 notify("ArtemisLM PS5: the server stopped, see /data/ArtemisLM/llama.log");
             }
@@ -1142,7 +1198,11 @@ int main(int, char **) {
                 note = file_note;
             }
             file_job = 0;
-            dash.set_busy("");
+            if (note.find("restarts") != std::string::npos) {
+                dash.set_busy("Moving into ArtemisLM", note);
+            } else {
+                dash.set_busy("");
+            }
             notify(("ArtemisLM PS5: " + note).c_str());
             std::printf("artemislm-ps5: %s\n", note.c_str());
             models.rescan(stats, false);
@@ -1226,7 +1286,13 @@ int main(int, char **) {
                     dash.set_busy(move ? "Moving into ArtemisLM" : "Deleting the model",
                                   move ? "The old file is removed after the copy finishes" : "");
                     std::thread([&, snap, path, running, move] {
-                        const std::string note = move ? library_move(snap, path, running) : library_remove(snap, path, running);
+                        std::string note;
+                        if (move) {
+                            bool restart = false;
+                            note = library_move_request(snap, path, running, &restart);
+                        } else {
+                            note = library_remove(snap, path, running);
+                        }
                         {
                             std::lock_guard<std::mutex> lock(file_mu);
                             file_note = note;

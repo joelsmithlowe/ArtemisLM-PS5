@@ -119,7 +119,7 @@ constexpr SettingCategory kCategories[] = {
         { Setting::flash_attn, "Flash attention", "On uses this GPU's shaders and less memory. Off builds the full scores" },
         { Setting::batch, "Prompt batch", "Safe is the size measured here. Larger is faster and can stall the GPU" },
         { Setting::slots, "Chats at once", "Each chat keeps its own context. Two needs twice the cache" },
-        { Setting::memory, "Memory fit", "Measured is the spare tested here. Tight fits a longer context and can fail a load" } },
+        { Setting::memory, "Memory fit", "Measured is the spare tested here. Spill keeps a full GPU from stopping the app" } },
       6 },
     { "Sampling",
       { { Setting::sampling, "Reply style", "Model keeps the family's own settings. The others replace them" },
@@ -474,7 +474,7 @@ std::string setting_text(const Settings & s, Setting id, const std::vector<Model
             return s.download_dir.rfind("/mnt/ext", 0) == 0 ? "M.2 drive, not found" : "USB drive, not found";
         }
         case Setting::migrate: return s.migrate == "on" ? "Move into ArtemisLM" : s.migrate == "off" ? "Leave them" : "Ask";
-        case Setting::memory: return s.memory == "tight" ? "Tight" : s.memory == "roomy" ? "More spare" : "Measured";
+        case Setting::memory: return s.memory == "tight" ? "Tight" : s.memory == "roomy" ? "More spare" : s.memory == "spill" ? "Spill to RAM" : "Measured";
         case Setting::agent: return s.agent == "plan" ? "Plan" : s.agent == "handoff" ? "Hand off" : "Off";
         case Setting::coordinator: return model_setting_text(s.coordinator, models);
         case Setting::worker: return model_setting_text(s.worker, models);
@@ -581,7 +581,7 @@ bool category_changed(const Settings & s, int index) {
 
 // The same sentence the phone shows: what the console will do on the next load.
 std::string setup_line(const Settings & s) {
-    const char * mem = s.memory == "tight" ? "Tight spare" : s.memory == "roomy" ? "More spare" : "Measured spare";
+    const char * mem = s.memory == "tight" ? "Tight spare" : s.memory == "roomy" ? "More spare" : s.memory == "spill" ? "Spill to RAM" : "Measured spare";
     const char * fa = s.flash_attn == "off" ? "flash attention off"
                       : s.flash_attn == "auto" ? "flash attention automatic" : "flash attention on";
     const char * batch = s.batch == "wide" ? "a wide prompt batch" : s.batch == "medium" ? "a medium prompt batch"
@@ -608,9 +608,9 @@ void running_note(const Settings & s, std::string * label, std::string * value) 
     } else if (s.batch == "wide" || s.batch == "medium") {
         *label = "Batch";
         *value = s.batch == "wide" ? "Wide" : "Medium";
-    } else if (s.memory == "tight" || s.memory == "roomy") {
+    } else if (s.memory == "tight" || s.memory == "roomy" || s.memory == "spill") {
         *label = "Fit";
-        *value = s.memory == "tight" ? "Tight" : "More spare";
+        *value = s.memory == "tight" ? "Tight" : s.memory == "spill" ? "RAM" : "More spare";
     } else if (s.flash_attn == "off" || s.flash_attn == "auto") {
         *label = "Attention";
         *value = s.flash_attn == "off" ? "Off" : "Auto";
@@ -737,6 +737,8 @@ std::vector<Choice> choices_of(const Settings & s, Setting id, const std::vector
                 [](Settings & v) { v.memory = "tight"; });
             add("More spare", "A shorter context, with more room left over", s.memory == "roomy",
                 [](Settings & v) { v.memory = "roomy"; });
+            add("Spill to RAM", "Layers that do not fit stay in memory. Slower, and the app stays up", s.memory == "spill",
+                [](Settings & v) { v.memory = "spill"; });
             break;
         case Setting::agent:
             add("Off", "One reply from the loaded model", s.agent == "off", [](Settings & v) { v.agent = "off"; });
@@ -2546,10 +2548,12 @@ void Dashboard::draw_dialogs(gfx::DrawList & l) const {
 void Dashboard::draw_busy(gfx::DrawList & l) const {
     const ui::Fonts & f = fonts_;
     l.rounded_rect({ 0, 0, 1920, 1080 }, 0, kBase);
-    const float ps5 = f.semibold.measure("PS5", 120), lm = f.semibold.measure("LM", 120);
-    const float x = 960 - (ps5 + lm) * 0.5f;
-    put(l, f.semibold, "PS5", x, 500, 120, kInk);
-    put(l, f.semibold, "LM", x + ps5, 500, 120, kBlue);
+    draw_flight(l, 960, 300, clock_);
+    const float word = 84;
+    const float artemis = f.semibold.measure("Artemis", word), lm = f.semibold.measure("LM", word);
+    const float x = 960 - (artemis + lm) * 0.5f;
+    put(l, f.semibold, "Artemis", x, 500, word, kInk);
+    put(l, f.semibold, "LM", x + artemis, 500, word, kBlue);
     put(l, f.regular, f.regular.font->fit(busy_title_, 32, 1400), 960, 600, 32, kInk, gfx::Align::center);
     put(l, f.regular, f.regular.font->fit(busy_text_, 24, 1400), 960, 646, 24, kInk2, gfx::Align::center);
     const float track = 360, seg = 96;

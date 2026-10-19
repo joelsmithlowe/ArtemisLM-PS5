@@ -209,6 +209,18 @@ mapfile -t libs < <(find "$out/llama" -name '*.a' | sort)
 
 title_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["titleId"])' "$param")
 app="$out/title/$title_id"
+# An older title left beside this one is a second icon if the whole title
+# folder is copied to the console. This build only ships $title_id.
+if [ -d "$out/title" ]; then
+    for sibling in "$out/title"/*; do
+        [ -d "$sibling" ] || continue
+        name=$(basename "$sibling")
+        if [ "$name" != "$title_id" ]; then
+            echo "build-app: removing leftover title $name"
+            rm -rf -- "$sibling"
+        fi
+    done
+fi
 rm -rf -- "$app"
 mkdir -p "$app/sce_sys" "$app/sce_module"
 "$tool" self --sign --in "$out/eboot.elf" --out "$app/eboot.bin" --magic 0x1D3D154F

@@ -104,6 +104,43 @@ int main(int argc, char ** argv) {
     assert(rp.reserve_gib > cp.reserve_gib);
     assert(has_args(rp, "-ngl", "999") && has_args(rp, "-fit", "off") && has_args(rp, "-cram", "0"));
 
+    // Nothing fits in too little memory. Spill keeps that file up by leaving
+    // layers in RAM. A model that already fits stays on the measured GPU path.
+    ps5lm::ModelInfo big;
+    big.ok = true; big.file_bytes = 20ull << 30; big.n_layer = 32; big.n_head_kv = 8;
+    big.key_length = big.value_length = 128;
+    assert(!ps5lm::plan_model(big, budget).fits);
+    ps5lm::RunOptions spill;
+    spill.memory = "spill";
+    const ps5lm::Plan sp = ps5lm::plan_model(big, budget, 65536, nullptr, spill);
+    assert(sp.fits && sp.why.find("RAM") != std::string::npos);
+    assert(!has_args(sp, "-ngl", "999") && has_args(sp, "-fit", "off") && has_args(sp, "-lm", "none"));
+    assert(ps5lm::plan_model(c, budget, 65536, nullptr, spill).fits);
+    assert(has_args(ps5lm::plan_model(c, budget, 65536, nullptr, spill), "-ngl", "999"));
+    // A plan that fits with almost no spare still dies on the first token.
+    // Measured keeps full GPU layers when the spare is comfortable.
+    ps5lm::ModelInfo cusp;
+    cusp.ok = true;
+    cusp.file_bytes = (10ull << 30) + (1ull << 29);
+    cusp.n_layer = 32;
+    cusp.n_head_kv = 1;
+    cusp.key_length = cusp.value_length = 1;
+    const ps5lm::Plan cusp_plan = ps5lm::plan_model(cusp, budget);
+    assert(cusp_plan.fits && cusp_plan.why.find("RAM") != std::string::npos);
+    assert(!has_args(cusp_plan, "-ngl", "999") && has_args(cusp_plan, "-fit", "off") && has_args(cusp_plan, "-lm", "none"));
+    // f16 does not fit, but a short q4 cache holds every layer. Spill must
+    // load that plan instead of refusing the file.
+    ps5lm::ModelInfo forced;
+    forced.ok = true;
+    forced.file_bytes = 10ull << 30;
+    forced.n_layer = 32;
+    forced.n_head_kv = 8;
+    forced.key_length = forced.value_length = 256;
+    assert(!ps5lm::plan_model(forced, budget, 65536, "f16").fits);
+    const ps5lm::Plan rescued = ps5lm::plan_model(forced, budget, 65536, "f16", spill);
+    assert(rescued.fits && rescued.ctx == 4096 && rescued.kv_type == "q4_0");
+    assert(has_args(rescued, "-ngl", "999") && has_args(rescued, "-fit", "off") && has_args(rescued, "-lm", "none"));
+
     if (argc < 2) {
         std::puts("model_plan_test: ok (synthetic only)");
         return 0;
@@ -136,10 +173,5 @@ int main(int argc, char ** argv) {
         }
     }
     assert(saw_q2k && saw_iq2xxs);
-    // Nothing fits in too little memory.
-    ps5lm::ModelInfo big;
-    big.ok = true; big.file_bytes = 20ull << 30; big.n_layer = 32; big.n_head_kv = 8;
-    big.key_length = big.value_length = 128;
-    assert(!ps5lm::plan_model(big, budget).fits);
     std::puts("model_plan_test: ok");
 }

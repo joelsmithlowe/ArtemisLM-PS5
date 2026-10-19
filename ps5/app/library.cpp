@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <mutex>
 
 namespace ps5lm {
@@ -171,8 +172,17 @@ std::string move_one(const std::string & model, const std::string & running, dou
             return error;
         }
     }
+    bool stuck = false;
     for (const auto & f : files) {
+        ec.clear();
         std::filesystem::remove(f, ec);
+        if (std::filesystem::exists(f)) {
+            stuck = true;
+        }
+    }
+    if (stuck) {
+        // The copy is the same size, so the next boot only has to delete this.
+        return base_name(model) + " is still open. Unload it first";
     }
     if (free_gib && *free_gib >= 0 && need > 0) {
         *free_gib -= (double) need / 1073741824.0;
@@ -280,6 +290,111 @@ std::string library_move(const Settings & s, const std::string & path, const std
     if (!errors.empty()) {
         note += ". " + errors;
     }
+    return note;
+}
+
+namespace {
+
+bool write_pending_move(const std::string & path) {
+    if (path.empty() || path.find("..") != std::string::npos) {
+        return false;
+    }
+    std::ofstream move(kPendingMove, std::ios::trunc);
+    std::ofstream unload("/data/ArtemisLM/unload", std::ios::trunc);
+    if (!move || !unload) {
+        return false;
+    }
+    move << path << '\n';
+    unload << "1\n";
+    return static_cast<bool>(move) && static_cast<bool>(unload);
+}
+
+}  // namespace
+
+std::string library_move_request(const Settings & s, const std::string & path, const std::string & running, bool * restart) {
+    if (restart) {
+        *restart = false;
+    }
+    const auto arm = [&](const std::string & file) {
+        if (!write_pending_move(file)) {
+            return std::string("Could not save the move");
+        }
+        if (restart) {
+            *restart = true;
+        }
+        return std::string("Unloading the model, then moving it into ArtemisLM. The console restarts.");
+    };
+    // The loaded file is mapped. Copying it can succeed and unlinking it cannot,
+    // so the restart happens before the copy.
+    if (!path.empty() && path == running) {
+        if (model_in_home(path)) {
+            return "It is already in the home folder";
+        }
+        return arm(path);
+    }
+    if (path.empty() && !running.empty() && !model_in_home(running)) {
+        const std::string note = library_move(s, "", running);
+        std::string text = arm(running);
+        if (note.rfind("Moved ", 0) == 0) {
+            text = note + " " + text;
+        }
+        return text;
+    }
+    const std::string note = library_move(s, path, running);
+    if (!path.empty() && note.find("Unload") != std::string::npos) {
+        const std::string text = arm(path);
+        return text.rfind("Unloading ", 0) == 0 ? text : note;
+    }
+    return note;
+}
+
+std::string library_finish_move(Settings * settings, std::string * load_path, std::string * from_path) {
+    if (load_path) {
+        load_path->clear();
+    }
+    if (from_path) {
+        from_path->clear();
+    }
+    std::ifstream in(kPendingMove);
+    if (!in) {
+        return {};
+    }
+    std::string path;
+    std::getline(in, path);
+    in.close();
+    while (!path.empty() && (path.back() == '\r' || path.back() == ' ')) {
+        path.pop_back();
+    }
+    std::error_code ec;
+    std::filesystem::remove(kPendingMove, ec);
+    // The restart marker must not fire again and clear the new path.
+    std::filesystem::remove("/data/ArtemisLM/unload", ec);
+    if (path.empty() || !settings) {
+        return {};
+    }
+    const std::string note = library_move(*settings, path, "");
+    const std::string dest = std::string(kHomeModels) + "/" + base_name(path);
+    const bool here = file_bytes(dest) > 0;
+    const bool gone = file_bytes(path) == 0;
+    if (note.rfind("Moved ", 0) != 0 || !here || !gone) {
+        return note.empty() ? std::string("The move did not finish") : note;
+    }
+    const auto retarget = [&](std::string & saved) {
+        if (saved == path) {
+            saved = dest;
+        }
+    };
+    retarget(settings->default_model);
+    retarget(settings->coordinator);
+    retarget(settings->worker);
+    if (load_path) {
+        *load_path = dest;
+    }
+    if (from_path) {
+        *from_path = path;
+    }
+    std::filesystem::remove(dest + ".moving", ec);
+    std::filesystem::remove(dest + ".part", ec);
     return note;
 }
 

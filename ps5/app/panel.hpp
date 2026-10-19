@@ -29,6 +29,8 @@ void page_start(std::function<void(const std::string &)> note);
 void page_stop();
 void panel_set_budget(double budget_gib);
 void panel_set_running(const std::string & path);
+// Shown on /artemis when the model stops. Empty clears it.
+void panel_set_fault(const std::string & text);
 int  panel_generation();
 
 }  // namespace ps5lm

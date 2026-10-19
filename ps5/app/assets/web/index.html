@@ -33,6 +33,7 @@
   html, body { margin: 0; height: 100%; background: #0c0c12; color: var(--body);
     font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   #sky { position: fixed; left: 0; top: 0; z-index: 0; pointer-events: none; }
+  body.away #sky { opacity: 0; visibility: hidden; }
   .top, .nav, .scroll, .page, .composer { position: relative; z-index: 1; }
   body { display: flex; flex-direction: column; min-height: 100%; }
   button, textarea { font: inherit; color: inherit; }
@@ -41,19 +42,22 @@
 
   .top { display: flex; align-items: center; gap: 0.75rem;
     padding: 0.85rem 1rem 0.8rem;
-    border-bottom: 1px solid var(--border); background: rgba(12, 12, 18, 0.55); }
+    border-bottom: 1px solid var(--border); background: #0e0e14; }
   .mark { width: 28px; height: 28px; flex: none; }
   .brand { color: var(--text); font-weight: 650; letter-spacing: 0.01em; }
   .brand span { color: var(--accent); font-weight: 650; }
   .model { color: var(--muted); font-size: 0.875rem; margin-left: auto;
     max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .nav { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 1rem 0.75rem; background: rgba(12, 12, 18, 0.4); }
+  .nav { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 1rem 0.75rem; background: #0e0e14; }
   .tab { min-height: 36px; border: 1px solid var(--border); background: transparent;
     color: var(--muted); border-radius: 999px; padding: 0.3rem 0.85rem; }
   .tab.on { background: var(--raised); color: var(--text); border-color: var(--raised); }
-  .page { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .page { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #0e0e14; }
   .page.off, .scroll.off { display: none; }
-  .card { background: rgba(23, 23, 31, 0.92); border: 1px solid var(--border); border-radius: 12px;
+  .page .column { background: #0e0e14; }
+  .page .card p, .page .note { color: #ddd8e6; }
+  .page .status { color: #c9c4d4; }
+  .card { background: #1c1c26; border: 1px solid var(--border); border-radius: 12px;
     padding: 0.85rem 1rem; margin: 0 0 0.6rem; }
   .card h2 { margin: 0 0 0.2rem; color: var(--text); font-size: 1rem; font-weight: 650; }
   .card p { margin: 0.15rem 0; color: var(--muted); font-size: 0.875rem; line-height: 1.4; }
@@ -71,7 +75,7 @@
   .status { color: var(--faint); font-size: 0.875rem; margin: 0 0 0.6rem; }
   body.away .composer { display: none; }
 
-  .scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .column { max-width: 42rem; margin: 0 auto; padding: 1.25rem 1rem 2rem; }
 
   .empty { padding: 8vh 0 1rem; }
@@ -227,9 +231,10 @@
 
 <div class="page off" id="view-library">
   <div class="column">
-    <p class="note">Models already on the console, then a Hugging Face search. Load restarts the console onto that model. Downloads go to the folder chosen in Settings. The home folder is /data/ArtemisLM/models.</p>
+    <p class="note">Models already on the console, then a Hugging Face search. Load restarts the console onto that model. A move of the loaded model unloads it, copies the file, checks the copy, then loads it from ArtemisLM. Downloads go to the folder chosen in Settings.</p>
     <div class="status" id="lib-status">Loading the library…</div>
     <div id="lib-list"></div>
+    <div id="dl-list"></div>
     <h2 style="color:#f4f1ea;font-size:1.15rem;margin:1.2rem 0 0.6rem;">Search Hugging Face</h2>
     <div class="searchbar">
       <input id="hf-q" type="search" placeholder="Qwen, Gemma, Llama…" autocomplete="off">
@@ -256,7 +261,7 @@
 
 <div class="page off" id="view-settings">
   <div class="column">
-    <p class="note">Every layer stays on the GPU. The measured fit is the one this console was tested with. Tight keeps less spare so a longer context can fit, and a load can fail. CPU threads stay on the safe count for this console.</p>
+    <p class="note">Measured keeps every layer on the GPU, with the spare this console was tested with. Spill to RAM leaves layers that do not fit in memory, so a model at the limit stays up instead of stopping the app. Tight keeps less spare and a load can fail.</p>
     <div class="status" id="set-status">Loading settings…</div>
     <div id="set-form"></div>
   </div>
@@ -400,6 +405,11 @@
     if (status === 404) return 'That tool is turned off in Settings on the console.';
     if (status === 0) return 'The console did not answer.';
     return 'The request failed (' + status + ').';
+  }
+  function consoleFault(fallback, done) {
+    panelSend('GET', '/artemis', null, function (c, d) {
+      done((d && d.fault) ? d.fault : fallback);
+    });
   }
   function bottom() { scroller.scrollTop = scroller.scrollHeight; }
   function busy(on) {
@@ -844,7 +854,10 @@
         return;
       }
       if (holder.caret.parentNode) holder.caret.parentNode.removeChild(holder.caret);
-      if (!body) fail(holder, req.status === 0 ? 'The console did not answer.' : 'No answer. Check that a model is loaded on the console.');
+      if (!body) {
+        if (req.status === 0) consoleFault('The console did not answer.', function (text) { fail(holder, text); });
+        else fail(holder, 'No answer. Check that a model is loaded on the console.');
+      }
       else {
         fillAnswer(answer, body);
         history.push({ role: 'assistant', content: body });
@@ -1543,7 +1556,10 @@
     for (var i = 0; i < ids.length; i++) {
       document.getElementById('tab-' + ids[i]).className = ids[i] === name ? 'tab on' : 'tab';
     }
-    if (name === 'library') loadLibrary();
+    if (name === 'library') {
+      loadLibrary();
+      pollDownloads();
+    }
     if (name === 'projects') loadProjects();
     if (name === 'settings') loadSettings();
   }
@@ -1619,8 +1635,12 @@
             move.type = 'button';
             move.textContent = 'Move to ArtemisLM';
             move.onclick = function () {
+              move.disabled = true;
+              status.textContent = m.current ? 'Unloading, then moving into ArtemisLM. The console restarts.' : 'Copying into ArtemisLM. The old file stays until the copy checks out.';
               panelSend('POST', '/move', { path: m.file }, function (c, d) {
                 status.textContent = (d && (d.note || d.error)) || 'Move failed';
+                if (d && d.restart) return;
+                move.disabled = false;
                 loadLibrary();
               });
             };
@@ -1671,10 +1691,21 @@
           get.className = 'primary';
           get.textContent = 'Download';
           get.onclick = function () {
+            if (!f.bytes) {
+              meta.textContent = 'This file has no size, so it was not downloaded.';
+              status.textContent = meta.textContent;
+              return;
+            }
             get.disabled = true;
-            panelSend('POST', '/download', { repo: repo, file: f.file, bytes: f.bytes || 0 }, function (c, d) {
-              status.textContent = (d && (d.note || d.error)) || 'Download was not queued';
-              get.disabled = false;
+            meta.textContent = 'Starting the download into the folder from Settings.';
+            status.textContent = meta.textContent;
+            pollDownloads();
+            panelSend('POST', '/download', { repo: repo, file: f.file, bytes: f.bytes || 0, sha: f.sha || '' }, function (c, d) {
+              var note = (d && (d.note || d.error)) || 'Download was not queued';
+              meta.textContent = note;
+              status.textContent = note;
+              if (!(d && d.ok)) get.disabled = false;
+              pollDownloads();
             });
           };
           buttons.appendChild(get);
@@ -1828,8 +1859,59 @@
       if (keep) updateTimer = setTimeout(paintUpdate, 1500);
     });
   }
+  var dlSeen = 0;
+  var dlReady = false;
+  var dlTimer = 0;
+  function downloadLine(d) {
+    var pct = d.bytes ? Math.floor(d.done * 100 / d.bytes) : 0;
+    if (d.state === 'done') return 'Saved' + (d.note ? '. ' + d.note : '');
+    if (d.state === 'failed') return d.note || 'Failed';
+    if (d.state === 'paused') return 'Paused';
+    if (d.state === 'retrying') return d.note || 'Trying again';
+    var speed = d.mbps ? ', ' + (Math.round(d.mbps * 10) / 10) + ' MB/s' : '';
+    return (d.state === 'queued' ? 'Queued' : pct + '%') + speed;
+  }
+  function pollDownloads() {
+    if (dlTimer) {
+      clearTimeout(dlTimer);
+      dlTimer = 0;
+    }
+    panelSend('GET', '/downloads', null, function (code, data) {
+      var box = document.getElementById('dl-list');
+      if (!box) return;
+      box.innerHTML = '';
+      var rows = data && data.downloads ? data.downloads : [];
+      var live = 0;
+      var done = 0;
+      var i;
+      for (i = 0; i < rows.length; i++) {
+        var d = rows[i];
+        if (d.state === 'done') done += 1;
+        else live += 1;
+        var card = document.createElement('div');
+        card.className = 'card';
+        var title = document.createElement('h2');
+        title.textContent = d.file || 'Download';
+        var meta = document.createElement('p');
+        var where = d.dir ? ' \u00b7 ' + d.dir : '';
+        meta.textContent = downloadLine(d) + where;
+        card.appendChild(title);
+        card.appendChild(meta);
+        box.appendChild(card);
+      }
+      if (dlReady && done > dlSeen) {
+        var libraryOpen = document.getElementById('view-library').className.indexOf('off') < 0;
+        dlSeen = done;
+        if (libraryOpen) loadLibrary();
+      } else {
+        dlSeen = done;
+      }
+      dlReady = true;
+      if (live) dlTimer = setTimeout(pollDownloads, 1000);
+    });
+  }
   function setupSentence(data) {
-    var mem = data.memory === 'tight' ? 'Tight spare' : data.memory === 'roomy' ? 'More spare' : 'Measured spare';
+    var mem = data.memory === 'tight' ? 'Tight spare' : data.memory === 'roomy' ? 'More spare' : data.memory === 'spill' ? 'Spill to RAM' : 'Measured spare';
     var fa = data.flash_attn === 'off' ? 'flash attention off' : data.flash_attn === 'auto' ? 'flash attention automatic' : 'flash attention on';
     var batch = data.batch === 'wide' ? 'a wide prompt batch' : data.batch === 'medium' ? 'a medium prompt batch' : 'a safe prompt batch';
     var chats = String(data.slots) === '2' ? 'two chats' : 'one chat';
@@ -1906,14 +1988,18 @@
       button.className = 'primary';
       button.textContent = 'Move other models into ArtemisLM';
       button.onclick = function () {
+        button.disabled = true;
+        status.textContent = 'Moving models that are not loaded. A loaded model restarts the console first.';
         panelSend('POST', '/move', {}, function (c, d) {
           status.textContent = (d && (d.note || d.error)) || 'Nothing moved';
+          if (d && d.restart) return;
+          button.disabled = false;
         });
       };
       move.appendChild(button);
       library.appendChild(move);
-      var context = addGroup(form, 'Context', 'Applies at the next load. Measured is the spare this console was tested with. Tight can fit a longer context and can fail a load. A wider batch fills a prompt faster and can stall the GPU.');
-      addSelect(context, 'Memory fit', 'memory', data.memory, [['measured', 'Measured'], ['tight', 'Tight'], ['roomy', 'More spare']], 'measured');
+      var context = addGroup(form, 'Context', 'Applies at the next load. Measured is the spare this console was tested with. Spill to RAM keeps a model that fills the GPU from stopping the app. Tight can fit a longer context and can fail a load.');
+      addSelect(context, 'Memory fit', 'memory', data.memory, [['measured', 'Measured'], ['tight', 'Tight'], ['roomy', 'More spare'], ['spill', 'Spill to RAM']], 'measured');
       addSelect(context, 'Longest context', 'ctx_cap', data.ctx_cap, [['4096', '4k'], ['8192', '8k'], ['16384', '16k'], ['32768', '32k'], ['65536', '64k'], ['131072', '128k']], '65536');
       addSelect(context, 'Context cache', 'kv_type', data.kv_type, [['auto', 'Auto'], ['f16', 'f16'], ['q8_0', 'q8_0'], ['q4_0', 'q4_0']], 'auto');
       addSelect(context, 'Flash attention', 'flash_attn', data.flash_attn, [['on', 'On'], ['auto', 'Auto'], ['off', 'Off']], 'on');
@@ -2317,13 +2403,18 @@
     }
     var started = Date.now();
     function frame() {
-      if (!reduce && document.hidden) {
-        setTimeout(frame, 200);
+      var quiet = document.body && document.body.className.indexOf('away') >= 0;
+      if (quiet || (!reduce && document.hidden)) {
+        if (quiet) {
+          ctx.fillStyle = '#0e0e14';
+          ctx.fillRect(0, 0, w, h);
+        }
+        setTimeout(frame, quiet ? 400 : 200);
         return;
       }
       var rot = reduce ? 0.6 : (Date.now() - started) * 0.00018;
-      var cx = w < 700 ? w * 0.5 : w * 0.78;
-      var cy = h * 0.4;
+      var cx = w < 700 ? w * 0.78 : w * 0.78;
+      var cy = w < 700 ? h * 0.72 : h * 0.38;
       var grd = ctx.createLinearGradient(0, 0, 0, h);
       grd.addColorStop(0, '#12121c');
       grd.addColorStop(1, '#0c0c12');

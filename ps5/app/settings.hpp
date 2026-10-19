@@ -46,7 +46,7 @@ struct Settings {
     std::string migrate = "ask";
     // "measured" is the spare the console was tested with. "tight" keeps less,
     // so a longer context can fit, and a load can fail. "roomy" keeps more.
-    // None of them moves a layer off the GPU.
+    // "spill" and a plan that fills the heap keep the extra layers in RAM.
     std::string memory = "measured";
     // Agent mode never loads two models at once. "off" is one reply. "plan"
     // writes a short plan, then the answer, on the model that is loaded.

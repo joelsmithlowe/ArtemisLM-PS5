@@ -1,12 +1,35 @@
 # Changelog
 
-ArtemisLM PS5 0.12.6, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
-version on the dashboard. The install file is `artemislm-ps5-app-v0.12.6.zip`.
-`contentVersion` is `01.012.006`. A newer release installs from Settings, or by
-copying the `PPSA98010` folder over the installed one.
+ArtemisLM PS5 0.12.7, by Joel Smith-Lowe. The version in `ps5/app/version.hpp` is the
+version on the dashboard. The install file is `artemislm-ps5-app-v0.12.7.zip`.
+`contentVersion` is `01.012.007`. A console already on 0.12.6 can install this
+from Settings. An older copy still needs the `PPSA98010` folder copied once.
 
 This title starts from PS5LM 0.9.0 by cobanov. The notes below are the work in
 this tree. PS5LM's own release history is not repeated here.
+
+## [0.12.7] - 2026-10-19
+
+### Fixed
+
+- Moving a loaded model into `/data/ArtemisLM/models` unloads it first, copies
+  the file, checks that the copy finished, removes the old file, and loads the
+  new path. The library shows that path.
+- Download on the phone starts the file, shows progress, and saves a `.gguf`
+  in the folder from Settings. The partial file and a leftover zip are removed
+  after the save checks out.
+- A model that fills the GPU can spill the extra layers into memory. Set Memory
+  fit to Spill to RAM, then load it again. A plan with almost no spare does
+  this on its own. A model that still cannot fit is refused. If the server
+  runs out of memory, the page says so.
+- The screen while a model loads says ArtemisLM.
+
+### Changed
+
+- Library, Projects, and Settings hide the animated background so the text
+  stays readable. Chat keeps it.
+- The build removes a leftover title folder next to `PPSA98010`. A release zip
+  that contains another title, or `ps5lm.elf`, is refused.
 
 ## [0.12.6] - 2026-10-19
 

@@ -59,7 +59,7 @@ void keep_known(Settings & s) {
     if (!one_of(s.migrate, { "off", "ask", "on" })) {
         s.migrate = "ask";
     }
-    if (!one_of(s.memory, { "measured", "tight", "roomy" })) {
+    if (!one_of(s.memory, { "measured", "tight", "roomy", "spill" })) {
         s.memory = "measured";
     }
     if (!extra_dir_ok(s.extra_dir)) {

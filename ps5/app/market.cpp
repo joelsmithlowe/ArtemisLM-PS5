@@ -39,6 +39,25 @@ std::string url_encode(const std::string & s) {
     return out;
 }
 
+// Encode each piece and keep the slashes, so a file in a folder still resolves.
+std::string encode_path(const std::string & text) {
+    std::string out, piece;
+    const auto flush = [&] {
+        out += url_encode(piece);
+        piece.clear();
+    };
+    for (char c : text) {
+        if (c == '/') {
+            flush();
+            out += '/';
+        } else {
+            piece += c;
+        }
+    }
+    flush();
+    return out;
+}
+
 // A whole response as a string, or empty with `error` set.
 std::string get_text(const std::string & url, const std::string & range, std::string * error, size_t limit = 64u << 20) {
     std::string body;
@@ -319,6 +338,10 @@ bool Market::enqueue(const MarketJob & job, double free) {
         std::printf("artemislm-ps5: download %s/%s: %s\n", job.repo.c_str(), job.file.c_str(), text);
         return false;
     }
+    if (job.bytes == 0) {
+        view_.note = job.file + " has no size, so it was not downloaded";
+        return false;
+    }
     Download d;
     static_cast<MarketJob &>(d) = job;
     d.resume = d.done = 0;  // ponytail: a stray partial file is fetched again, its progress is not known
@@ -424,7 +447,7 @@ bool Market::fetch(Download & d) {
     constexpr uint64_t kPiece = 32ull << 20;
     const std::string part = part_path(d);
     const std::string to = part.substr(0, part.size() - 5);
-    const std::string url = std::string(kHub) + "/" + d.repo + "/resolve/main/" + d.file;
+    const std::string url = std::string(kHub) + "/" + encode_path(d.repo) + "/resolve/main/" + encode_path(d.file);
     std::error_code ec;
     std::filesystem::create_directories(d.dir, ec);
     const auto publish = [&](bool save) {
@@ -452,7 +475,7 @@ bool Market::fetch(Download & d) {
     if (d.resume > d.bytes || d.resume > file_size(part)) {
         d.resume = 0;  // not this file, or the partial file is gone
     }
-    const int fd = open(part.c_str(), O_WRONLY | O_CREAT, 0666);
+    const int fd = open(part.c_str(), O_WRONLY | O_CREAT | (d.resume == 0 ? O_TRUNC : 0), 0666);
     if (fd < 0) {
         d.state = DownloadState::failed;
         d.note = "Failed: cannot write to " + d.dir;
@@ -614,6 +637,14 @@ bool Market::fetch(Download & d) {
     } else {
         d.state = DownloadState::done;
         d.note = "Saved to " + to;
+        std::filesystem::remove(part, ec);
+        if (to.size() > 5 && to.compare(to.size() - 5, 5, ".gguf") == 0) {
+            const std::string stem = to.substr(0, to.size() - 5);
+            std::filesystem::remove(stem + ".zip", ec);
+            std::filesystem::remove(stem + ".gguf.part", ec);
+        }
+        std::filesystem::remove(to + ".part", ec);
+        std::filesystem::remove(to + ".moving", ec);
     }
     std::printf("artemislm-ps5: download %s/%s: %s\n", d.repo.c_str(), d.file.c_str(), d.note.c_str());
     publish(true);

@@ -56,6 +56,7 @@ std::mutex g_panel;  // short library calls. An agent ask does not hold this.
 Market * g_market = nullptr;
 double g_budget = 0;
 std::string g_running;
+std::string g_fault;
 std::atomic<int> g_gen{ 0 };
 std::atomic<bool> g_panel_stop{ false };
 std::atomic<int> g_panel_fd{ -1 };
@@ -243,11 +244,13 @@ std::string catalog_json() {
 std::string artemis_json() {
     double budget = 0;
     std::string running;
+    std::string fault;
     std::string agent = "off";
     {
         std::lock_guard<std::mutex> lock(g_mu);
         budget = g_budget;
         running = g_running;
+        fault = g_fault;
         agent = load_settings(kSettingsPath).agent;
     }
     const std::string ip = local_address();
@@ -259,6 +262,7 @@ std::string artemis_json() {
         { "budget_gib", budget },
         { "agent", agent },
         { "loaded", running.empty() ? nlohmann::json(nullptr) : nlohmann::json(running) },
+        { "fault", fault },
         { "note", "One model stays on the GPU. Any model name works on the chat port. LM Studio can use the mcp address." },
     };
     if (!ip.empty()) {
@@ -384,10 +388,15 @@ std::string search_files(const std::string & repo) {
                 continue;
             }
             uint64_t bytes = e.value("size", (uint64_t) 0);
+            std::string sha;
             if (e.contains("lfs") && e["lfs"].is_object()) {
                 bytes = e["lfs"].value("size", bytes);
+                sha = e["lfs"].value("oid", std::string());
+                if (sha.rfind("sha256:", 0) == 0) {
+                    sha = sha.substr(7);
+                }
             }
-            files.push_back({ { "file", path }, { "bytes", bytes } });
+            files.push_back({ { "file", path }, { "bytes", bytes }, { "sha", sha } });
         }
     }
     return nlohmann::json{ { "repo", repo }, { "files", std::move(files) }, { "error", error } }.dump();
@@ -564,10 +573,52 @@ std::string download_file(const std::string & body) {
     job.file = file;
     job.dir = dir;
     job.bytes = bytes;
+    job.sha256 = j.value("sha", std::string());
+    if (job.sha256.rfind("sha256:", 0) == 0) {
+        job.sha256 = job.sha256.substr(7);
+    }
+    bool sha_ok = job.sha256.size() == 64;
+    for (unsigned char c : job.sha256) {
+        sha_ok = sha_ok && std::isxdigit(c);
+    }
+    if (!sha_ok) {
+        job.sha256.clear();
+    }
     if (!market->enqueue(job, drive_free_gib(dir))) {
         return nlohmann::json{ { "error", market->snapshot().note } }.dump();
     }
     return nlohmann::json{ { "ok", true }, { "note", market->snapshot().note }, { "dir", dir } }.dump();
+}
+
+const char * download_state(DownloadState state) {
+    switch (state) {
+        case DownloadState::queued: return "queued";
+        case DownloadState::running: return "running";
+        case DownloadState::retrying: return "retrying";
+        case DownloadState::paused: return "paused";
+        case DownloadState::failed: return "failed";
+        case DownloadState::done: return "done";
+    }
+    return "queued";
+}
+
+std::string downloads_json() {
+    Market * market = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_mu);
+        market = g_market;
+    }
+    nlohmann::json rows = nlohmann::json::array();
+    std::string note;
+    if (market) {
+        const MarketView view = market->snapshot();
+        note = view.note;
+        for (const auto & d : view.downloads) {
+            rows.push_back({ { "repo", d.repo }, { "file", d.file }, { "dir", d.dir }, { "bytes", d.bytes },
+                             { "done", d.done }, { "mbps", d.mbps }, { "state", download_state(d.state) }, { "note", d.note } });
+        }
+    }
+    return nlohmann::json{ { "downloads", std::move(rows) }, { "note", note } }.dump();
 }
 
 std::string act_move(const std::string & body) {
@@ -583,8 +634,12 @@ std::string act_move(const std::string & body) {
         s = load_settings(kSettingsPath);
         running = g_running;
     }
-    const std::string note = library_move(s, path, running);
+    bool restart = false;
+    const std::string note = library_move_request(s, path, running, &restart);
     bump();
+    if (restart) {
+        return nlohmann::json{ { "ok", true }, { "restart", true }, { "note", note } }.dump();
+    }
     const bool bad = note.rfind("Moved ", 0) != 0;
     return nlohmann::json{ { bad ? "error" : "note", note } }.dump();
 }
@@ -646,6 +701,8 @@ void handle(int fd, const std::string & method, const std::string & path, const 
         out = repo.empty() ? search_repos(query_value(path, "q")) : search_files(repo);
     } else if (method == "POST" && route == "/settings") {
         out = save_from_page(body);
+    } else if (method == "GET" && route == "/downloads") {
+        out = downloads_json();
     } else if (method == "POST" && route == "/download") {
         out = download_file(body);
     } else if (method == "POST" && route == "/move") {
@@ -1378,6 +1435,11 @@ void panel_set_budget(double budget_gib) {
 void panel_set_running(const std::string & path) {
     std::lock_guard<std::mutex> lock(g_mu);
     g_running = path;
+}
+
+void panel_set_fault(const std::string & text) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    g_fault = text;
 }
 
 int panel_generation() { return g_gen.load(); }

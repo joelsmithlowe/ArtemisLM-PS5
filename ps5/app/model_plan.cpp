@@ -17,6 +17,18 @@ namespace {
 
 constexpr double kGiB = 1073741824.0;
 
+// How many layers' weights fit in room_gib. n_layer means all of them.
+uint32_t layers_that_fit(double room_gib, double weights_gib, uint32_t n_layer) {
+    if (n_layer == 0 || weights_gib <= 0 || room_gib <= 0) {
+        return 0;
+    }
+    const double n = room_gib * (double) n_layer / weights_gib;
+    if (n >= (double) n_layer) {
+        return n_layer;
+    }
+    return (uint32_t) n;
+}
+
 // GGUF metadata value types.
 enum : uint32_t { U8, I8, U16, I16, U32, I32, F32, BOOL, STRING, ARRAY, U64, I64, F64 };
 
@@ -405,17 +417,74 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
         }
     }
 
-    char why[160];
+    // 999 keeps every layer on the GPU, the measured path. A plan that fills
+    // the heap, or Spill to RAM, leaves the layers that do not fit in ordinary
+    // memory. -lm none is already mmap without mlock, so those layers can page.
+    uint32_t gpu_layers = 999;
+    char why[240];
     if (!p.fits) {
-        p.total_gib = p.weights_gib + p.state_gib + p.reserve_gib;
-        std::snprintf(why, sizeof(why), "needs %.1f GiB with a 4k context; %.1f GiB is free", p.total_gib, budget_gib);
+        if (run.memory == "spill" && m.n_layer > 0 && p.weights_gib > 0) {
+            const uint32_t ctx = std::min(ctx_cap, m.n_ctx_train ? std::min(m.n_ctx_train, 4096u) : 4096u);
+            const double kv = kv_bytes_per_token(m, "q4_0") * ctx * slots / kGiB;
+            const double room = budget_gib - kv - p.state_gib - p.reserve_gib;
+            const uint32_t ngl = layers_that_fit(room, p.weights_gib, m.n_layer);
+            // A short q4 cache can hold every layer even when the forced cache
+            // type cannot. Zero layers would still be the whole file in RAM.
+            if (room > 0.30 && ngl >= m.n_layer) {
+                p.fits = true;
+                p.ctx = ctx;
+                p.kv_type = "q4_0";
+                p.kv_gib = kv;
+                p.total_gib = p.weights_gib + kv + p.state_gib + p.reserve_gib;
+                std::snprintf(why, sizeof(why), "%uk context, q4_0 cache: %.1f of %.1f GiB",
+                              p.ctx / 1024, p.total_gib, budget_gib);
+                p.why = why;
+                const double headroom = budget_gib - p.total_gib;
+                if (headroom < 0.20 && run.memory != "tight" && m.n_layer > 1) {
+                    const double keep = p.weights_gib - (0.80 - headroom);
+                    const uint32_t drop = layers_that_fit(keep > 0 ? keep : 0, p.weights_gib, m.n_layer);
+                    if (drop >= 1 && drop < m.n_layer) {
+                        gpu_layers = drop;
+                        p.total_gib = p.weights_gib * (double) drop / (double) m.n_layer + kv + p.state_gib + p.reserve_gib;
+                        p.why += ". Some layers stay in RAM so a full GPU does not stop the app";
+                    }
+                }
+            } else if (room > 0.30 && ngl >= 1 && ngl < m.n_layer) {
+                p.fits = true;
+                p.ctx = ctx;
+                p.kv_type = "q4_0";
+                p.kv_gib = kv;
+                gpu_layers = ngl;
+                p.total_gib = p.weights_gib * (double) ngl / (double) m.n_layer + kv + p.state_gib + p.reserve_gib;
+                std::snprintf(why, sizeof(why), "%u of %u layers on the GPU, the rest in RAM, %uk context: %.1f GiB on the GPU",
+                              ngl, m.n_layer, p.ctx / 1024, p.total_gib);
+                p.why = why;
+            }
+        }
+        if (!p.fits) {
+            p.total_gib = p.weights_gib + p.state_gib + p.reserve_gib;
+            std::snprintf(why, sizeof(why), "needs %.1f GiB with a 4k context; %.1f GiB is free", p.total_gib, budget_gib);
+            p.why = why;
+            return p;
+        }
+    } else {
+        std::snprintf(why, sizeof(why), "%s%uk context, %s cache%s: %.1f of %.1f GiB",
+                      m.decision.empty() ? "" : ("decision model (" + m.decision + "), ").c_str(), p.ctx / 1024,
+                      p.kv_type.c_str(), m.mmproj.empty() ? "" : ", images", p.total_gib, budget_gib);
         p.why = why;
-        return p;
+        // The first token has run past this spare when the plan uses the last
+        // of the heap. Tight is the choice that packs it in anyway.
+        const double headroom = budget_gib - p.total_gib;
+        if (headroom < 0.20 && run.memory != "tight" && m.n_layer > 1 && p.weights_gib > 0) {
+            const double keep = p.weights_gib - (0.80 - headroom);
+            const uint32_t ngl = layers_that_fit(keep > 0 ? keep : 0, p.weights_gib, m.n_layer);
+            if (ngl >= 1 && ngl < m.n_layer) {
+                gpu_layers = ngl;
+                p.why += ". Some layers stay in RAM so a full GPU does not stop the app";
+            }
+        }
     }
-    std::snprintf(why, sizeof(why), "%s%uk context, %s cache%s: %.1f of %.1f GiB",
-                  m.decision.empty() ? "" : ("decision model (" + m.decision + "), ").c_str(), p.ctx / 1024,
-                  p.kv_type.c_str(), m.mmproj.empty() ? "" : ", images", p.total_gib, budget_gib);
-    p.why = why;
+    const std::string ngl = gpu_layers == 999 ? std::string("999") : std::to_string(gpu_layers);
 
     // Text models stay at the measured 256/64 batch: a submission that makes
     // no progress for 10 s loses the device, and a Gated DeltaNet layer loops
@@ -432,13 +501,13 @@ Plan plan_model(const ModelInfo & m, double budget_gib, uint32_t ctx_cap, const 
         ubatch_n = 256;
     }
     const char * flash = run.flash_attn == "off" || run.flash_attn == "auto" ? run.flash_attn.c_str() : "on";
-    p.args = { "-m", m.path, "-ngl", "999", "-fit", "off", "-lm", "none",
+    p.args = { "-m", m.path, "-ngl", ngl, "-fit", "off", "-lm", "none",
                "-c", std::to_string(p.ctx), "-fa", flash, "-ctk", p.kv_type, "-ctv", p.kv_type,
                "-b", std::to_string(batch_n), "-ub", std::to_string(ubatch_n), "-np", std::to_string(slots),
                // One prompt checkpoint and no RAM cache: llama-server's defaults
                // (32 checkpoints, 8 GiB) are for a PC, and the CPU shares this pool.
-               // -ngl 999 and -fit off stay. The model sits on the one device heap,
-               // and the fit step's extra block is what stopped the first 27B load.
+               // -fit off stays. -ngl 999 stays unless the plan spills layers into RAM.
+               // The fit step's extra block is what stopped the first 27B load.
                "-ctxcp", "1", "-cram", "0",
                "--host", "0.0.0.0", "--port", std::to_string(kChatPort) };
     if (!m.mmproj.empty()) {

@@ -88,7 +88,7 @@ struct RunOptions {
     int32_t     max_tokens = -1;       // -1: no limit
     std::string reasoning  = "auto";   // "auto", "on" or "off"
     std::string system_prompt = "none";  // "none", "helpful", "concise" or "home"
-    std::string memory = "measured";     // "measured", "tight" or "roomy"; the GPU flags stay
+    std::string memory = "measured";     // "measured", "tight", "roomy" or "spill"
     // Extra sampling. "off" and "random" add no flag, so the measured launch
     // stays as it was. None of these changes the GPU flags.
     std::string repeat_penalty = "off";  // "off", "light", "medium" or "strong"
